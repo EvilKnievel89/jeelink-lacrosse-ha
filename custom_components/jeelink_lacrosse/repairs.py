@@ -139,10 +139,12 @@ class JeeLinkIdReplacementRepairFlow(RepairsFlow):
             for slug, state in coordinator.sensors.items()
             if not coordinator.is_available(slug)
         }
+        # Scan-Fall: nur plausible neue IDs (nach Offline-Gehen aufgetaucht),
+        # nicht jede je gehörte Fremd-ID.
         candidate_ids = (
             [self._new_id]
             if self._new_id is not None
-            else sorted(coordinator.unknown_ids)
+            else coordinator.replacement_candidates()
         )
 
         if not offline or not candidate_ids:

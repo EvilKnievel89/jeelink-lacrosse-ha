@@ -94,7 +94,7 @@ async def test_async_start_loads_state_and_stores_unsub():
     assert "bad" in coord.sensors
     assert coord.sensors["bad"].lacrosse_id == 56
     assert coord.sensors["bad"].last_seen == 111.0     # aus dem Store geladen
-    assert coord.unknown_ids == {7}
+    assert set(coord.unknown_ids) == {7}
     # Reader wurde mit den Verbindungsdaten aus entry.data erzeugt
     _, kwargs = MockReader.call_args
     assert kwargs["device"] == "/dev/ttyUSB0"
@@ -112,8 +112,37 @@ async def test_async_start_prunes_configured_ids_from_unknown():
         coord._store.preset = {"last_seen": {}, "unknown_ids": [56, 7]}
         await coord.async_start()
 
-    assert coord.unknown_ids == {7}            # 56 wurde entfernt
+    assert set(coord.unknown_ids) == {7}            # 56 wurde entfernt
     assert 56 not in coord.unknown_ids
+
+
+async def test_replacement_candidates_only_ids_after_offline():
+    """Verfeinerung: nur IDs anbieten, die NACH dem Offline-Gehen auftauchten."""
+    coord = JeeLinkCoordinator(_make_hass(), _make_entry())
+    state = SensorState(56, "Badezimmer")
+    state.last_seen = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60 + 100)  # offline
+    coord.sensors = {"bad": state}
+    coord.unknown_ids = {
+        7: state.last_seen - 50,    # Fremd-Sensor, war schon vorher bekannt
+        88: state.last_seen + 10,   # neu nach Offline-Gehen -> Kandidat
+    }
+
+    assert coord.replacement_candidates() == [88]
+
+
+async def test_replacement_candidates_empty_without_offline():
+    coord = JeeLinkCoordinator(_make_hass(), _make_entry())
+    online = SensorState(56, "Badezimmer")
+    online.last_seen = time.time()                 # gerade gesehen -> nicht offline
+    coord.sensors = {"bad": online}
+    coord.unknown_ids = {88: time.time()}
+    assert coord.replacement_candidates() == []
+
+
+def test_load_unknown_ids_accepts_old_and_new_format():
+    assert JeeLinkCoordinator._load_unknown_ids([1, 2]) == {1: 0.0, 2: 0.0}
+    assert JeeLinkCoordinator._load_unknown_ids({"1": 10.0}) == {1: 10.0}
+    assert JeeLinkCoordinator._load_unknown_ids(None) == {}
 
 
 async def test_on_measurement_updates_state_and_battery_fields():

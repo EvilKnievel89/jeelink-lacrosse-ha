@@ -32,12 +32,16 @@ class FakeCoordinator:
 
     def __init__(self) -> None:
         self.sensors: dict[str, SensorState] = {}
-        self.unknown_ids: set[int] = set()
+        self.unknown_ids: dict[int, float] = {}
         self._available: dict[str, bool] = {}
+        self.candidates: list[int] = []        # was replacement_candidates() liefert
         self.reassign_id = AsyncMock()
 
     def is_available(self, slug: str) -> bool:
         return self._available.get(slug, False)
+
+    def replacement_candidates(self) -> list[int]:
+        return self.candidates
 
 
 def _hass_with(entry_id: str, coordinator) -> SimpleNamespace:
@@ -142,16 +146,18 @@ async def test_flow_shows_form_then_reassigns_on_submit():
     assert result2["type"] == "create_entry"
 
 
-async def test_flow_scan_offers_unknown_ids():
+async def test_flow_scan_offers_only_replacement_candidates():
     coord = FakeCoordinator()
     coord.sensors = {"bad": SensorState(56, "Badezimmer")}
     coord._available = {"bad": False}
-    coord.unknown_ids = {100, 99}
+    # Fremd-IDs sind bekannt, aber nur die zeitlich gefilterten Kandidaten zählen
+    coord.unknown_ids = {1: 0.0, 16: 0.0, 99: 123.0, 100: 124.0}
+    coord.candidates = [99, 100]
     flow = _flow("e1", None, coord, issue_id="id_replacement_e1_scan")
 
     result = await flow.async_step_init()
     assert result["type"] == "form"
-    # sortierte unbekannte IDs als Kandidaten
+    # nur die Replacement-Kandidaten, nicht die Fremd-IDs 1/16
     assert result["description_placeholders"]["new_ids"] == "99, 100"
 
 
@@ -193,7 +199,7 @@ async def test_offline_sensor_plus_unknown_id_creates_issue():
     state.last_seen = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60 + 100)
     state.available = True
     coord.sensors = {"bad": state}
-    coord.unknown_ids = {99}
+    coord.unknown_ids = {99: time.time()}   # ID tauchte JETZT auf, also nach Offline-Gehen
 
     with patch.object(repairs, "async_create_id_replacement_issue", new=AsyncMock()) as issue:
         await coord._async_check_offline_sensors()
@@ -211,7 +217,7 @@ async def test_no_issue_when_no_unknown_ids():
     state = SensorState(56, "Bad")
     state.last_seen = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60 + 100)
     coord.sensors = {"bad": state}
-    coord.unknown_ids = set()
+    coord.unknown_ids = {}
 
     with patch.object(repairs, "async_create_id_replacement_issue", new=AsyncMock()) as issue:
         await coord._async_check_offline_sensors()
