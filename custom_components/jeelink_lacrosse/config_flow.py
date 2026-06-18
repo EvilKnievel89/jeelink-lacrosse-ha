@@ -12,10 +12,12 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, CONF_DEVICE, CONF_BAUD, DEFAULT_BAUD
+from .options_flow import JeeLinkOptionsFlow
 from .serial_reader import JeeLinkSerialReader, list_serial_ports
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +30,12 @@ class JeeLinkConfigFlow(ConfigFlow, domain=DOMAIN):
     """Setup-Wizard für einen JeeLink-Stick."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Options Flow (Sensoren verwalten) bereitstellen."""
+        return JeeLinkOptionsFlow()
 
     def __init__(self) -> None:
         self._baud: int = DEFAULT_BAUD

@@ -45,5 +45,52 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "JeeLink-Sensoren",
+        "description": "Verwalte die LaCrosse-Sensoren dieses JeeLink.",
+        "menu_options": {
+          "add_sensor": "Sensor hinzufügen",
+          "edit_sensor": "Sensor bearbeiten",
+          "remove_sensor": "Sensor entfernen"
+        }
+      },
+      "add_sensor": {
+        "title": "Sensor hinzufügen",
+        "description": "Zuletzt empfangene unbekannte IDs: {unknown_ids}.\nGib die LaCrosse-ID und einen Namen ein.",
+        "data": {
+          "lacrosse_id": "LaCrosse-ID",
+          "friendly_name": "Name"
+        }
+      },
+      "edit_sensor": {
+        "title": "Sensor bearbeiten",
+        "data": {
+          "sensor": "Sensor"
+        }
+      },
+      "edit_details": {
+        "title": "Sensor bearbeiten",
+        "description": "Bearbeite {name}.",
+        "data": {
+          "lacrosse_id": "LaCrosse-ID",
+          "friendly_name": "Name"
+        }
+      },
+      "remove_sensor": {
+        "title": "Sensor entfernen",
+        "data": {
+          "sensor": "Sensor"
+        }
+      }
+    },
+    "error": {
+      "id_in_use": "Diese LaCrosse-ID ist bereits einem anderen Sensor zugewiesen.",
+      "name_required": "Bitte gib einen Namen ein.",
+      "unknown_sensor": "Unbekannter Sensor.",
+      "unknown": "Die Änderung konnte nicht gespeichert werden."
+    }
   }
 }

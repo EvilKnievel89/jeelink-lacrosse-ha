@@ -168,13 +168,16 @@ Die HA-Mindestversion gehört bei Custom-Integrationen hierher, nicht ins manife
 ```json
 {
   "name": "JeeLink LaCrosse",
-  "homeassistant": "2022.9.0",
+  "homeassistant": "2024.11.0",
   "render_readme": true
 }
 ```
 
-`homeassistant: "2022.9.0"` wegen der Repairs-API: Repairs landeten in 2022.8, das
-`issue_registry` wurde in 2022.9 nach `homeassistant.helpers` verschoben (Phase 6).
+Mindestversion **2024.11.0**: Die Repairs-API (Phase 6) wäre schon ab 2022.9
+nutzbar, der Options-Flow (Phase 7) nutzt aber den modernen `OptionsFlow` ohne
+selbst gesetztes `self.config_entry` – das wird seit 2024.11 vom Flow-Manager
+bereitgestellt (das frühere manuelle Setzen ist inzwischen nicht mehr erlaubt).
+Damit ist 2024.11 die bindende Untergrenze.
 
 ---
 
