@@ -24,5 +24,26 @@
     "abort": {
       "already_configured": "This JeeLink is already configured."
     }
+  },
+  "issues": {
+    "id_replacement": {
+      "title": "Possible sensor ID change ({offline_sensors})",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Assign new LaCrosse ID",
+            "description": "Offline sensor(s): {offline_sensors}.\nA new, unknown ID was received ({new_ids}) — most likely the same sensor after a battery change. Pick the sensor and the new ID to keep its history and entities.",
+            "data": {
+              "sensor": "Sensor",
+              "new_id": "New LaCrosse ID"
+            }
+          }
+        },
+        "abort": {
+          "entry_not_loaded": "The integration is not loaded right now. The issue stays open and can be fixed later.",
+          "already_resolved": "Nothing to do anymore — the sensor is back online or the unknown ID disappeared."
+        }
+      }
+    }
   }
 }

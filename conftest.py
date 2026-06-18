@@ -18,6 +18,56 @@ from unittest.mock import MagicMock
 sys.path.insert(0, os.path.dirname(__file__))
 
 
+def _install_voluptuous_stub() -> None:
+    """Minimaler voluptuous-Ersatz (nur, wenn nicht echt installiert).
+
+    repairs.py/config_flow.py bauen Schemata mit Schema/Required/In. Hier reicht
+    ein Stub, der die Schema-Struktur durchreichbar/inspizierbar macht – Tests
+    prüfen Verhalten, keine echte voluptuous-Validierung.
+    """
+    try:
+        import voluptuous  # noqa: F401
+        return
+    except ImportError:
+        pass
+
+    vol = types.ModuleType("voluptuous")
+
+    class _Marker:
+        def __init__(self, schema, default=None, **kwargs):
+            self.schema = schema
+            self.default = default
+
+        def __hash__(self):
+            return hash(self.schema)
+
+        def __eq__(self, other):
+            return self.schema == getattr(other, "schema", other)
+
+        def __call__(self, value):
+            return value
+
+    class _In:
+        def __init__(self, container, **kwargs):
+            self.container = container
+
+        def __call__(self, value):
+            return value
+
+    class _Schema:
+        def __init__(self, schema, **kwargs):
+            self.schema = schema
+
+        def __call__(self, data):
+            return data
+
+    vol.Schema = _Schema
+    vol.Required = type("Required", (_Marker,), {})
+    vol.Optional = type("Optional", (_Marker,), {})
+    vol.In = _In
+    sys.modules["voluptuous"] = vol
+
+
 def _install_ha_import_stubs() -> None:
     try:
         import homeassistant  # noqa: F401
@@ -34,9 +84,11 @@ def _install_ha_import_stubs() -> None:
     event = types.ModuleType("homeassistant.helpers.event")
     storage = types.ModuleType("homeassistant.helpers.storage")
     device_registry = types.ModuleType("homeassistant.helpers.device_registry")
+    issue_registry = types.ModuleType("homeassistant.helpers.issue_registry")
     components = types.ModuleType("homeassistant.components")
     sensor = types.ModuleType("homeassistant.components.sensor")
     binary_sensor = types.ModuleType("homeassistant.components.binary_sensor")
+    repairs = types.ModuleType("homeassistant.components.repairs")
 
     class HomeAssistant:  # nur als Typname (PEP 563: Annotations bleiben Strings)
         ...
@@ -87,6 +139,43 @@ def _install_ha_import_stubs() -> None:
     class _BinarySensorDeviceClass:
         BATTERY = "battery"
 
+    class _IssueSeverity:
+        CRITICAL = "critical"
+        ERROR = "error"
+        WARNING = "warning"
+
+    class _RepairsFlow:
+        """Minimaler RepairsFlow-Ersatz: Step-Resultate als dicts.
+
+        hass wird in echtem HA vom Flow-Manager gesetzt; in Tests setzen wir es
+        direkt auf der Instanz.
+        """
+
+        hass = None
+
+        def async_show_form(
+            self,
+            *,
+            step_id,
+            data_schema=None,
+            errors=None,
+            description_placeholders=None,
+            last_step=None,
+        ):
+            return {
+                "type": "form",
+                "step_id": step_id,
+                "data_schema": data_schema,
+                "errors": errors,
+                "description_placeholders": description_placeholders,
+            }
+
+        def async_create_entry(self, *, title="", data=None):
+            return {"type": "create_entry", "title": title, "data": data or {}}
+
+        def async_abort(self, *, reason, description_placeholders=None):
+            return {"type": "abort", "reason": reason}
+
     core.HomeAssistant = HomeAssistant
     core.callback = lambda fn: fn
     const.Platform = _Platform
@@ -97,11 +186,15 @@ def _install_ha_import_stubs() -> None:
     event.async_track_time_interval = lambda *a, **k: MagicMock()
     storage.Store = _Store
     device_registry.DeviceInfo = dict     # DeviceInfo(**kwargs) -> dict
+    issue_registry.IssueSeverity = _IssueSeverity
+    issue_registry.async_create_issue = lambda *a, **k: None
+    issue_registry.async_delete_issue = lambda *a, **k: None
     sensor.SensorEntity = type("SensorEntity", (_EntityBase,), {})
     sensor.SensorDeviceClass = _SensorDeviceClass
     sensor.SensorStateClass = _SensorStateClass
     binary_sensor.BinarySensorEntity = type("BinarySensorEntity", (_EntityBase,), {})
     binary_sensor.BinarySensorDeviceClass = _BinarySensorDeviceClass
+    repairs.RepairsFlow = _RepairsFlow
 
     ha.core = core
     ha.const = const
@@ -111,8 +204,10 @@ def _install_ha_import_stubs() -> None:
     helpers.event = event
     helpers.storage = storage
     helpers.device_registry = device_registry
+    helpers.issue_registry = issue_registry
     components.sensor = sensor
     components.binary_sensor = binary_sensor
+    components.repairs = repairs
 
     sys.modules.update(
         {
@@ -124,11 +219,14 @@ def _install_ha_import_stubs() -> None:
             "homeassistant.helpers.event": event,
             "homeassistant.helpers.storage": storage,
             "homeassistant.helpers.device_registry": device_registry,
+            "homeassistant.helpers.issue_registry": issue_registry,
             "homeassistant.components": components,
             "homeassistant.components.sensor": sensor,
             "homeassistant.components.binary_sensor": binary_sensor,
+            "homeassistant.components.repairs": repairs,
         }
     )
 
 
+_install_voluptuous_stub()
 _install_ha_import_stubs()

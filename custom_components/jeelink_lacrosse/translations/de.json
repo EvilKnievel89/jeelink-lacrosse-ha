@@ -24,5 +24,26 @@
     "abort": {
       "already_configured": "Dieser JeeLink ist bereits eingerichtet."
     }
+  },
+  "issues": {
+    "id_replacement": {
+      "title": "Mögliche Sensor-ID-Änderung ({offline_sensors})",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Neue LaCrosse-ID zuweisen",
+            "description": "Offline-Sensor(en): {offline_sensors}.\nEs wurde eine neue, unbekannte ID empfangen ({new_ids}) – höchstwahrscheinlich derselbe Sensor nach einem Batteriewechsel. Wähle den Sensor und die neue ID, um Historie und Entitäten zu erhalten.",
+            "data": {
+              "sensor": "Sensor",
+              "new_id": "Neue LaCrosse-ID"
+            }
+          }
+        },
+        "abort": {
+          "entry_not_loaded": "Die Integration ist gerade nicht geladen. Das Problem bleibt offen und kann später behoben werden.",
+          "already_resolved": "Nichts mehr zu tun – der Sensor ist wieder online oder die unbekannte ID ist verschwunden."
+        }
+      }
+    }
   }
 }
