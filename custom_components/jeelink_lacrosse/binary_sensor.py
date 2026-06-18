@@ -55,7 +55,7 @@ class JeeLinkNewBatterySensor(JeeLinkEntity, BinarySensorEntity):
     """Frisch eingelegte Batterie (Diagnose) – kurz nach Batteriewechsel gesetzt."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "New battery"
+    _attr_translation_key = "new_battery"
 
     def __init__(self, coordinator: JeeLinkCoordinator, entry, slug: str) -> None:
         super().__init__(coordinator, entry, slug)

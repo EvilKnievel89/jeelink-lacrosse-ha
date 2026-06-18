@@ -1,12 +1,12 @@
 {
   "domain": "jeelink_lacrosse",
   "name": "JeeLink LaCrosse",
-  "version": "0.1.0",
-  "integration_type": "hub",
-  "codeowners": ["@dein-github-name"],
+  "codeowners": ["@EvilKnievel89"],
   "config_flow": true,
+  "documentation": "https://github.com/EvilKnievel89/jeelink-lacrosse-ha",
+  "integration_type": "hub",
   "iot_class": "local_push",
+  "issue_tracker": "https://github.com/EvilKnievel89/jeelink-lacrosse-ha/issues",
   "requirements": ["pyserial-asyncio-fast>=0.16"],
-  "documentation": "https://github.com/dein-repo/jeelink-lacrosse-ha",
-  "issue_tracker": "https://github.com/dein-repo/jeelink-lacrosse-ha/issues"
+  "version": "0.1.0"
 }

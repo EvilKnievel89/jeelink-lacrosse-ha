@@ -46,6 +46,13 @@
       }
     }
   },
+  "entity": {
+    "binary_sensor": {
+      "new_battery": {
+        "name": "Neue Batterie"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
