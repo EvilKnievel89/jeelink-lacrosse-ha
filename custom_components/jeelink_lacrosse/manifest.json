@@ -8,5 +8,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/EvilKnievel89/jeelink-lacrosse-ha/issues",
   "requirements": ["pyserial-asyncio-fast>=0.16"],
-  "version": "0.1.0"
+  "version": "0.2.1"
 }
