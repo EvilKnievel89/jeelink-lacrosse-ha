@@ -147,3 +147,19 @@ async def test_test_connection_failure_on_oserror():
         ok = await JeeLinkSerialReader.test_connection("/dev/ttyNOPE", 57600)
 
     assert ok is False
+
+
+def test_list_serial_ports_builds_labels():
+    """list_serial_ports baut {device: label} und blendet 'n/a'-Beschreibungen aus."""
+    from custom_components.jeelink_lacrosse.serial_reader import list_serial_ports
+
+    p1 = MagicMock(); p1.device = "/dev/ttyUSB0"; p1.description = "FT232R USB UART"
+    p2 = MagicMock(); p2.device = "/dev/ttyUSB1"; p2.description = "n/a"
+
+    with patch("serial.tools.list_ports.comports", return_value=[p1, p2]):
+        ports = list_serial_ports()
+
+    assert ports == {
+        "/dev/ttyUSB0": "/dev/ttyUSB0 - FT232R USB UART",
+        "/dev/ttyUSB1": "/dev/ttyUSB1",
+    }

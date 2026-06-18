@@ -15,7 +15,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import (
     DOMAIN,
-    CONF_DEVICE, CONF_BAUD,
+    CONF_DEVICE, CONF_BAUD, DEFAULT_BAUD,
     CONF_SENSORS, CONF_LACROSSE_ID,
     OFFLINE_THRESHOLD_MINUTES,
     CHECK_INTERVAL_MINUTES,
@@ -78,9 +78,10 @@ class JeeLinkCoordinator:
             state.last_seen = last_seen_map.get(slug, 0.0)
             self.sensors[slug] = state
 
+        # Verbindungsdaten stehen in entry.data (Config Flow), Sensoren in entry.options
         self._reader = JeeLinkSerialReader(
-            device=options[CONF_DEVICE],
-            baud=options.get(CONF_BAUD, 57600),
+            device=self.entry.data[CONF_DEVICE],
+            baud=self.entry.data.get(CONF_BAUD, DEFAULT_BAUD),
             on_measurement=self._on_measurement,
         )
         await self._reader.async_start()
@@ -106,16 +107,9 @@ class JeeLinkCoordinator:
         # Letzten Stand synchron flushen (Store-Delay-Save würde sonst verloren gehen)
         await self._store.async_save(self._data_to_store())
 
-    async def async_options_updated(
-        self, hass: HomeAssistant, entry: ConfigEntry
-    ) -> None:
-        """Aufgerufen, wenn Options im Config-Flow geändert werden (echte Config)."""
-        await self.async_stop()
-        self.sensors.clear()
-        self.unknown_ids.clear()
-        self._listeners.clear()
-        self.entry = entry
-        await self.async_start()
+    # Hinweis: Ein Reload bei Options-Änderung wird in __init__.py via
+    # config_entries.async_reload ausgelöst (frischer Coordinator). Eine eigene
+    # async_options_updated-Methode (manuelles stop/start) entfällt damit bewusst.
 
     # --- Measurement-Callback ----------------------------------------------
 

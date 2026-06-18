@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "JeeLink LaCrosse",
+        "description": "Wähle den seriellen Port deines JeeLink-Sticks.",
+        "data": {
+          "device": "Serieller Port",
+          "baud": "Baudrate"
+        }
+      },
+      "manual": {
+        "title": "Port manuell eingeben",
+        "description": "Gib den Gerätepfad an, z. B. /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_XXXX-if00-port0.",
+        "data": {
+          "device": "Gerätepfad",
+          "baud": "Baudrate"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum JeeLink fehlgeschlagen. Prüfe Pfad und Baudrate."
+    },
+    "abort": {
+      "already_configured": "Dieser JeeLink ist bereits eingerichtet."
+    }
+  }
+}

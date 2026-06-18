@@ -139,3 +139,22 @@ class JeeLinkSerialReader:
         finally:
             if writer is not None:
                 writer.close()
+
+
+def list_serial_ports() -> dict[str, str]:
+    """
+    Liefert {device_path: label} der aktuell verfügbaren seriellen Ports.
+
+    Reiner Helfer für den Config Flow – kein HA-, kein asyncio-Bezug. Da
+    serial.tools.list_ports synchron/blockierend ist, im Config Flow per
+    hass.async_add_executor_job(...) aufrufen.
+    """
+    from serial.tools import list_ports
+
+    result: dict[str, str] = {}
+    for port in list_ports.comports():
+        label = port.device
+        if port.description and port.description not in ("n/a", ""):
+            label = f"{port.device} - {port.description}"
+        result[port.device] = label
+    return result
