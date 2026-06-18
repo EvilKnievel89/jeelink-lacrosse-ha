@@ -1,0 +1,5 @@
+# Test-Abhängigkeiten für Phase 3 (protocol.py + serial_reader.py).
+# pyserial-asyncio-fast zieht pyserial als Abhängigkeit mit.
+pytest>=8.0
+pytest-asyncio>=0.23
+pyserial-asyncio-fast>=0.16
