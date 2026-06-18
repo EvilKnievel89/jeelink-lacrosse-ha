@@ -6,7 +6,8 @@ Options-Änderung lädt den Eintrag über den Update-Listener in __init__.py neu
 
 Die HA-freien Transformationen liegen in :mod:`_sensor_config`; hier nur Formulare,
 Fehleranzeige und der (optionale) Zugriff auf den Coordinator, um beim Hinzufügen
-die zuletzt empfangenen, noch unbekannten IDs als Hilfestellung anzuzeigen.
+und Bearbeiten die zuletzt empfangenen, noch unbekannten IDs (mit letzten Werten)
+als Auswahl-Dropdown anzubieten.
 
 config_entry wird seit HA 2024.11 vom Flow-Manager bereitgestellt (Property), daher
 KEIN ``__init__``, das es selbst setzt (das ist inzwischen nicht mehr erlaubt).
@@ -28,9 +29,6 @@ _LOGGER = logging.getLogger(__name__)
 
 FRIENDLY_NAME = sc.FRIENDLY_NAME
 CONF_SENSOR = "sensor"
-
-# LaCrosse-IT+-Sende-ID passt in ein Byte (Validierung in _sensor_config)
-_ID_FIELD = vol.All(vol.Coerce(int), vol.Range(min=sc.ID_MIN, max=sc.ID_MAX))
 
 
 class JeeLinkOptionsFlow(OptionsFlow):
@@ -70,22 +68,10 @@ class JeeLinkOptionsFlow(OptionsFlow):
                 else:
                     return self.async_create_entry(title="", data=new_options)
 
-        # Dropdown der zuletzt empfangenen, noch unbekannten IDs (mit letzten
-        # Messwerten als Auswahlhilfe). custom_value lässt zusätzlich eine ID von
-        # Hand eintippen – z. B. bei Ersteinrichtung, bevor der Sensor gehört wurde.
-        options = [
-            selector.SelectOptionDict(value=value, label=label)
-            for value, label in self._unknown_id_options().items()
-        ]
+        id_key, id_field = self._id_select_field()
         schema = vol.Schema(
             {
-                vol.Required(CONF_LACROSSE_ID): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=options,
-                        custom_value=True,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
+                id_key: id_field,
                 vol.Required(FRIENDLY_NAME): str,
             }
         )
@@ -120,22 +106,27 @@ class JeeLinkOptionsFlow(OptionsFlow):
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            try:
-                new_options = sc.update_sensor(
-                    self.config_entry.options,
-                    slug,
-                    lacrosse_id=user_input[CONF_LACROSSE_ID],
-                    friendly_name=user_input[FRIENDLY_NAME],
-                )
-            except sc.SensorConfigError as err:
-                errors["base"] = err.error_key
+            lacrosse_id = sc.parse_id(user_input[CONF_LACROSSE_ID])
+            if lacrosse_id is None:
+                errors["base"] = "invalid_id"
             else:
-                return self.async_create_entry(title="", data=new_options)
+                try:
+                    new_options = sc.update_sensor(
+                        self.config_entry.options,
+                        slug,
+                        lacrosse_id=lacrosse_id,
+                        friendly_name=user_input[FRIENDLY_NAME],
+                    )
+                except sc.SensorConfigError as err:
+                    errors["base"] = err.error_key
+                else:
+                    return self.async_create_entry(title="", data=new_options)
 
         current = sensors[slug]
+        id_key, id_field = self._id_select_field(default=current[CONF_LACROSSE_ID])
         schema = vol.Schema(
             {
-                vol.Required(CONF_LACROSSE_ID, default=current[CONF_LACROSSE_ID]): _ID_FIELD,
+                id_key: id_field,
                 vol.Required(FRIENDLY_NAME, default=current[FRIENDLY_NAME]): str,
             }
         )
@@ -167,6 +158,30 @@ class JeeLinkOptionsFlow(OptionsFlow):
 
     def _sensors(self) -> dict:
         return self.config_entry.options.get(CONF_SENSORS, {})
+
+    def _id_select_field(self, default: int | None = None):
+        """Schema-Eintrag fürs ID-Feld: Dropdown der gesehenen, noch unbekannten IDs
+        (mit letzten Messwerten als Auswahlhilfe). ``custom_value`` lässt zusätzlich
+        eine ID von Hand eintippen – z. B. eine noch nicht gehörte. ``default`` (als
+        String) belegt beim Bearbeiten die aktuelle ID vor.
+        """
+        options = [
+            selector.SelectOptionDict(value=value, label=label)
+            for value, label in self._unknown_id_options().items()
+        ]
+        field = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=options,
+                custom_value=True,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
+        key = (
+            vol.Required(CONF_LACROSSE_ID)
+            if default is None
+            else vol.Required(CONF_LACROSSE_ID, default=str(default))
+        )
+        return key, field
 
     def _unknown_id_options(self) -> dict[str, str]:
         """``{str(id): Label}`` der gesehenen, noch unbekannten IDs (oder leer)."""

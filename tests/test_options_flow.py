@@ -94,8 +94,9 @@ async def test_edit_sensor_flow(hass):
     assert result["step_id"] == "edit_sensor"
     result = await options.async_configure(result["flow_id"], {"sensor": "bad"})
     assert result["step_id"] == "edit_details"
+    # ID-Feld ist auch hier ein Dropdown (SelectSelector, custom_value) -> String
     result = await options.async_configure(
-        result["flow_id"], {CONF_LACROSSE_ID: 60, "friendly_name": "Badezimmer"}
+        result["flow_id"], {CONF_LACROSSE_ID: "60", "friendly_name": "Badezimmer"}
     )
     assert result["type"] == "create_entry"
     cfg = entry.options[CONF_SENSORS]["bad"]
