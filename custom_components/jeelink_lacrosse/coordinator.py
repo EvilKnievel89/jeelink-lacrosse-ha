@@ -28,7 +28,11 @@ _LOGGER = logging.getLogger(__name__)
 # Transienter Laufzeit-State (last_seen, unknown_ids) wird im Store gehalten,
 # NICHT in entry.options (das würde über den Update-Listener einen Reload triggern).
 STORAGE_VERSION = 1
-PERSIST_DELAY_SECONDS = 300   # debounced save
+
+# Eine neue, unbekannte ID muss MEHRFACH empfangen werden, bevor sie als
+# Batteriewechsel-Kandidat zählt. So fallen einmalige Einschalt-/Rauschpakete
+# (z. B. Power-on-Bursts fremder Sensoren mit new_batt-Bit) heraus.
+MIN_REPLACEMENT_SIGHTINGS = 3
 
 
 class SensorState:
@@ -52,11 +56,13 @@ class JeeLinkCoordinator:
         self.hass = hass
         self.entry = entry
         self.sensors: dict[str, SensorState] = {}
-        # Unbekannte (unkonfigurierte) IDs -> Zeitpunkt der Ersterfassung. Der
-        # Zeitstempel erlaubt es, beim ID-Replacement nur IDs anzubieten, die ERST
-        # NACH dem Offline-Gehen eines Sensors auftauchten (echter Batteriewechsel),
-        # statt dauerhaft mithörender Fremd-Sensoren.
-        self.unknown_ids: dict[int, float] = {}
+        # Unbekannte (unkonfigurierte) IDs -> Aufzeichnung je ID:
+        #   {"first_seen", "last_seen", "count", "temperature"}.
+        # Daraus werden Batteriewechsel-Kandidaten abgeleitet: eine ID gilt nur als
+        # Kandidat, wenn sie NACH dem Offline-Gehen eines Sensors auftauchte,
+        # MEHRFACH empfangen wurde (kein Einschalt-/Rauschburst) und noch aktiv ist.
+        self.unknown_ids: dict[int, dict] = {}
+        self._dirty = False                       # ungespeicherte State-Änderungen
         self._reader: JeeLinkSerialReader | None = None
         self._listeners: dict[str, list[callable]] = {}
         self._store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
@@ -122,8 +128,9 @@ class JeeLinkCoordinator:
             self._unsub_interval = None
         if self._reader:
             await self._reader.async_stop()
-        # Letzten Stand synchron flushen (Store-Delay-Save würde sonst verloren gehen)
+        # Letzten Stand synchron flushen
         await self._store.async_save(self._data_to_store())
+        self._dirty = False
 
     # Hinweis: Ein Reload bei Options-Änderung wird in __init__.py via
     # config_entries.async_reload ausgelöst (frischer Coordinator). Eine eigene
@@ -146,15 +153,27 @@ class JeeLinkCoordinator:
 
             for cb in self._listeners.get(slug, []):
                 cb()
-
-            # Debounced in den Store schreiben (kein entry.options, kein Reload)
-            self._store.async_delay_save(self._data_to_store, PERSIST_DELAY_SECONDS)
+            self._dirty = True
         else:
-            if m.sensor_id not in self.unknown_ids:
-                self.unknown_ids[m.sensor_id] = time.time()   # Ersterfassung merken
-                _LOGGER.info("Neue unbekannte LaCrosse-ID empfangen: %d", m.sensor_id)
-                self._store.async_delay_save(self._data_to_store, PERSIST_DELAY_SECONDS)
-                await self._async_check_for_replacement(m.sensor_id)
+            self._track_unknown(m)
+
+    def _track_unknown(self, m: LaCrosseMeasurement) -> None:
+        """Unbekannte ID aufzeichnen: Ersterfassung, Häufigkeit, letzter Wert."""
+        now = time.time()
+        rec = self.unknown_ids.get(m.sensor_id)
+        if rec is None:
+            self.unknown_ids[m.sensor_id] = {
+                "first_seen": now,
+                "last_seen": now,
+                "count": 1,
+                "temperature": m.temperature,
+            }
+            _LOGGER.info("Neue unbekannte LaCrosse-ID empfangen: %d", m.sensor_id)
+        else:
+            rec["last_seen"] = now
+            rec["count"] += 1
+            rec["temperature"] = m.temperature
+        self._dirty = True
 
     @callback
     def _data_to_store(self) -> dict:
@@ -162,20 +181,37 @@ class JeeLinkCoordinator:
         return {
             "last_seen": {slug: s.last_seen for slug, s in self.sensors.items()},
             # JSON-Keys müssen Strings sein -> id als str, beim Laden zurück nach int
-            "unknown_ids": {str(uid): ts for uid, ts in self.unknown_ids.items()},
+            "unknown_ids": {str(uid): rec for uid, rec in self.unknown_ids.items()},
         }
 
     @staticmethod
-    def _load_unknown_ids(raw) -> dict[int, float]:
-        """unknown_ids aus dem Store laden.
+    def _load_unknown_ids(raw) -> dict[int, dict]:
+        """unknown_ids aus dem Store laden – abwärtskompatibel.
 
-        Neues Format: {id: first_seen}. Abwärtskompatibel zum alten Format
-        (reine Liste von IDs) – dort ist die Ersterfassung unbekannt (0.0).
+        Akzeptiert das aktuelle Format {id: {first_seen,last_seen,count,temperature}},
+        das ältere {id: first_seen} und das ursprüngliche [id, ...].
         """
+        def _rec(first_seen=0.0, last_seen=0.0, count=0, temperature=None) -> dict:
+            return {
+                "first_seen": float(first_seen),
+                "last_seen": float(last_seen),
+                "count": int(count),
+                "temperature": temperature,
+            }
+
         if isinstance(raw, dict):
-            return {int(k): float(v) for k, v in raw.items()}
+            out: dict[int, dict] = {}
+            for k, v in raw.items():
+                if isinstance(v, dict):
+                    out[int(k)] = _rec(
+                        v.get("first_seen", 0.0), v.get("last_seen", 0.0),
+                        v.get("count", 0), v.get("temperature"),
+                    )
+                else:  # altes {id: first_seen}
+                    out[int(k)] = _rec(first_seen=v, last_seen=v)
+            return out
         if isinstance(raw, list):
-            return {int(i): 0.0 for i in raw}
+            return {int(i): _rec() for i in raw}
         return {}
 
     # --- Listener-Registrierung --------------------------------------------
@@ -218,28 +254,54 @@ class JeeLinkCoordinator:
     def replacement_candidates(self) -> list[int]:
         """Plausible neue IDs für einen Batteriewechsel.
 
-        Nur unbekannte IDs, die ERST NACH dem letzten Empfang eines jetzt offline
-        Sensors auftauchten. Dadurch werden dauerhaft mithörende Fremd-Sensoren
-        (deren ID schon vor dem Offline-Gehen bekannt war) nicht angeboten.
+        Eine unbekannte ID zählt nur, wenn sie
+          1. ERST NACH dem letzten Empfang eines jetzt offline Sensors auftauchte,
+          2. MEHRFACH empfangen wurde (kein einmaliger Einschalt-/Rauschburst) und
+          3. aktuell noch sendet (nicht selbst schon wieder verstummt).
+        So fallen dauerhaft mithörende Fremd-Sensoren UND Einmal-Pakete heraus.
         """
         offline = self._offline_sensors()
         if not offline:
             return []
         earliest_offline = min(state.last_seen for state in offline.values())
+        active_after = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60)
         return sorted(
-            uid for uid, first_seen in self.unknown_ids.items()
-            if first_seen >= earliest_offline
+            uid for uid, rec in self.unknown_ids.items()
+            if rec["first_seen"] >= earliest_offline
+            and rec["count"] >= MIN_REPLACEMENT_SIGHTINGS
+            and rec["last_seen"] >= active_after
         )
 
-    async def _async_check_offline_sensors(self, _now=None) -> None:
-        offline = self._offline_sensors()
+    def candidate_label(self, uid: int) -> str:
+        """Label eines Kandidaten inkl. letztem Messwert (zur Unterscheidung mehrerer)."""
+        rec = self.unknown_ids.get(uid) or {}
+        temp = rec.get("temperature")
+        return f"{uid} ({temp:.1f} °C)" if temp is not None else f"{uid}"
 
-        # Issue nur, wenn es plausible neue IDs gibt (nach Offline-Gehen aufgetaucht)
-        if offline and self.replacement_candidates():
-            from .repairs import async_create_id_replacement_issue
+    async def _async_flush_store(self) -> None:
+        """State periodisch persistieren. Ein per-Messung-Debounce würde bei
+        Dauer-Sendeverkehr ständig zurückgesetzt und nie schreiben."""
+        if self._dirty:
+            await self._store.async_save(self._data_to_store())
+            self._dirty = False
+
+    async def _async_check_offline_sensors(self, _now=None) -> None:
+        await self._async_flush_store()
+
+        offline = self._offline_sensors()
+        candidates = self.replacement_candidates()
+
+        from .repairs import (
+            async_create_id_replacement_issue,
+            async_delete_id_replacement_issue,
+        )
+        if offline and candidates:
             await async_create_id_replacement_issue(
-                self.hass, self.entry.entry_id, None, offline
+                self.hass, self.entry.entry_id, offline
             )
+        else:
+            # Lage erledigt -> ggf. bestehendes Issue zurückziehen (Reconcile).
+            async_delete_id_replacement_issue(self.hass, self.entry.entry_id)
 
         for slug, state in self.sensors.items():
             was_available = state.available
@@ -251,16 +313,6 @@ class JeeLinkCoordinator:
                 )
                 for cb in self._listeners.get(slug, []):
                     cb()
-
-    async def _async_check_for_replacement(self, new_id: int) -> None:
-        # new_id ist gerade frisch aufgetaucht -> per se ein Kandidat. Wenn ein
-        # Sensor offline ist, ist das fast sicher derselbe nach Batteriewechsel.
-        offline = self._offline_sensors()
-        if offline:
-            from .repairs import async_create_id_replacement_issue
-            await async_create_id_replacement_issue(
-                self.hass, self.entry.entry_id, new_id, offline
-            )
 
     async def reassign_id(self, slug: str, new_lacrosse_id: int) -> None:
         """
@@ -277,6 +329,7 @@ class JeeLinkCoordinator:
 
         self.unknown_ids.pop(new_lacrosse_id, None)
         await self._store.async_save(self._data_to_store())
+        self._dirty = False
 
         new_options = copy.deepcopy(dict(self.entry.options))
         if slug in new_options.get(CONF_SENSORS, {}):

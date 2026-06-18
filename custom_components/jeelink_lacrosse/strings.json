@@ -32,7 +32,7 @@
         "step": {
           "confirm": {
             "title": "Assign new LaCrosse ID",
-            "description": "Offline sensor(s): {offline_sensors}.\nA new, unknown ID was received ({new_ids}) — most likely the same sensor after a battery change. Pick the sensor and the new ID to keep its history and entities.",
+            "description": "Offline sensor(s): {offline_sensors}.\nA likely battery-changed sensor was detected. Pick the offline sensor and its new ID — the value shows the last reading to help you match — to keep its history and entities.",
             "data": {
               "sensor": "Sensor",
               "new_id": "New LaCrosse ID"

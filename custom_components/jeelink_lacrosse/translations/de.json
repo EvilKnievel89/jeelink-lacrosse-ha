@@ -32,7 +32,7 @@
         "step": {
           "confirm": {
             "title": "Neue LaCrosse-ID zuweisen",
-            "description": "Offline-Sensor(en): {offline_sensors}.\nEs wurde eine neue, unbekannte ID empfangen ({new_ids}) – höchstwahrscheinlich derselbe Sensor nach einem Batteriewechsel. Wähle den Sensor und die neue ID, um Historie und Entitäten zu erhalten.",
+            "description": "Offline-Sensor(en): {offline_sensors}.\nEin wahrscheinlich nach Batteriewechsel neu sendender Sensor wurde erkannt. Wähle den Offline-Sensor und die neue ID – der Wert zeigt den letzten Messwert als Zuordnungshilfe –, um Historie und Entitäten zu erhalten.",
             "data": {
               "sensor": "Sensor",
               "new_id": "Neue LaCrosse-ID"

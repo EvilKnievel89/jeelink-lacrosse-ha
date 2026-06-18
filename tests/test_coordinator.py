@@ -116,15 +116,27 @@ async def test_async_start_prunes_configured_ids_from_unknown():
     assert 56 not in coord.unknown_ids
 
 
-async def test_replacement_candidates_only_ids_after_offline():
-    """Verfeinerung: nur IDs anbieten, die NACH dem Offline-Gehen auftauchten."""
+def _rec(first_seen, count=3, temperature=22.0, last_seen=None):
+    return {
+        "first_seen": first_seen,
+        "last_seen": first_seen if last_seen is None else last_seen,
+        "count": count,
+        "temperature": temperature,
+    }
+
+
+async def test_replacement_candidates_only_established_ids_after_offline():
+    """Verfeinerung: nur IDs, die NACH dem Offline-Gehen auftauchten UND mehrfach
+    empfangen wurden (kein Einmal-Burst)."""
     coord = JeeLinkCoordinator(_make_hass(), _make_entry())
     state = SensorState(56, "Badezimmer")
     state.last_seen = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60 + 100)  # offline
     coord.sensors = {"bad": state}
+    now = time.time()
     coord.unknown_ids = {
-        7: state.last_seen - 50,    # Fremd-Sensor, war schon vorher bekannt
-        88: state.last_seen + 10,   # neu nach Offline-Gehen -> Kandidat
+        7: _rec(state.last_seen - 50),          # vor Offline-Gehen bekannt -> raus
+        40: _rec(now, count=1),                 # nur einmal gesehen (Burst) -> raus
+        88: _rec(now, count=4),                 # neu + etabliert -> Kandidat
     }
 
     assert coord.replacement_candidates() == [88]
@@ -135,13 +147,23 @@ async def test_replacement_candidates_empty_without_offline():
     online = SensorState(56, "Badezimmer")
     online.last_seen = time.time()                 # gerade gesehen -> nicht offline
     coord.sensors = {"bad": online}
-    coord.unknown_ids = {88: time.time()}
+    coord.unknown_ids = {88: _rec(time.time(), count=5)}
     assert coord.replacement_candidates() == []
 
 
-def test_load_unknown_ids_accepts_old_and_new_format():
-    assert JeeLinkCoordinator._load_unknown_ids([1, 2]) == {1: 0.0, 2: 0.0}
-    assert JeeLinkCoordinator._load_unknown_ids({"1": 10.0}) == {1: 10.0}
+def test_load_unknown_ids_accepts_all_formats():
+    # altes Listenformat
+    assert JeeLinkCoordinator._load_unknown_ids([1, 2]) == {
+        1: {"first_seen": 0.0, "last_seen": 0.0, "count": 0, "temperature": None},
+        2: {"first_seen": 0.0, "last_seen": 0.0, "count": 0, "temperature": None},
+    }
+    # zwischenzeitliches {id: first_seen}
+    assert JeeLinkCoordinator._load_unknown_ids({"1": 10.0}) == {
+        1: {"first_seen": 10.0, "last_seen": 10.0, "count": 0, "temperature": None},
+    }
+    # aktuelles Record-Format
+    rec = {"first_seen": 5.0, "last_seen": 9.0, "count": 4, "temperature": 21.0}
+    assert JeeLinkCoordinator._load_unknown_ids({"7": rec}) == {7: rec}
     assert JeeLinkCoordinator._load_unknown_ids(None) == {}
 
 
@@ -161,8 +183,8 @@ async def test_on_measurement_updates_state_and_battery_fields():
     assert state.new_battery is False
     assert state.available is True
     assert state.last_seen > 0
-    # State wurde debounced in den Store geschrieben (nicht in entry.options!)
-    assert coord._store.delay_saved, "async_delay_save sollte aufgerufen worden sein"
+    # State als "dirty" markiert (periodischer Flush schreibt; kein entry.options!)
+    assert coord._dirty is True
     coord.hass.config_entries.async_update_entry.assert_not_called()
 
 
