@@ -85,6 +85,7 @@ def _install_ha_import_stubs() -> None:
     storage = types.ModuleType("homeassistant.helpers.storage")
     device_registry = types.ModuleType("homeassistant.helpers.device_registry")
     issue_registry = types.ModuleType("homeassistant.helpers.issue_registry")
+    selector = types.ModuleType("homeassistant.helpers.selector")
     components = types.ModuleType("homeassistant.components")
     sensor = types.ModuleType("homeassistant.components.sensor")
     binary_sensor = types.ModuleType("homeassistant.components.binary_sensor")
@@ -144,6 +145,26 @@ def _install_ha_import_stubs() -> None:
         ERROR = "error"
         WARNING = "warning"
 
+    class _SelectSelectorMode:
+        DROPDOWN = "dropdown"
+        LIST = "list"
+
+    def _SelectOptionDict(value=None, label=None):
+        return {"value": value, "label": label}
+
+    class _SelectSelectorConfig(dict):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+
+    class _SelectSelector:
+        """Inspizierbarer SelectSelector-Ersatz; Tests lesen .config."""
+
+        def __init__(self, config=None):
+            self.config = config or {}
+
+        def __call__(self, value):
+            return value
+
     class _RepairsFlow:
         """Minimaler RepairsFlow-Ersatz: Step-Resultate als dicts.
 
@@ -189,6 +210,10 @@ def _install_ha_import_stubs() -> None:
     issue_registry.IssueSeverity = _IssueSeverity
     issue_registry.async_create_issue = lambda *a, **k: None
     issue_registry.async_delete_issue = lambda *a, **k: None
+    selector.SelectSelector = _SelectSelector
+    selector.SelectSelectorConfig = _SelectSelectorConfig
+    selector.SelectSelectorMode = _SelectSelectorMode
+    selector.SelectOptionDict = _SelectOptionDict
     sensor.SensorEntity = type("SensorEntity", (_EntityBase,), {})
     sensor.SensorDeviceClass = _SensorDeviceClass
     sensor.SensorStateClass = _SensorStateClass
@@ -205,6 +230,7 @@ def _install_ha_import_stubs() -> None:
     helpers.storage = storage
     helpers.device_registry = device_registry
     helpers.issue_registry = issue_registry
+    helpers.selector = selector
     components.sensor = sensor
     components.binary_sensor = binary_sensor
     components.repairs = repairs
@@ -220,6 +246,7 @@ def _install_ha_import_stubs() -> None:
             "homeassistant.helpers.storage": storage,
             "homeassistant.helpers.device_registry": device_registry,
             "homeassistant.helpers.issue_registry": issue_registry,
+            "homeassistant.helpers.selector": selector,
             "homeassistant.components": components,
             "homeassistant.components.sensor": sensor,
             "homeassistant.components.binary_sensor": binary_sensor,

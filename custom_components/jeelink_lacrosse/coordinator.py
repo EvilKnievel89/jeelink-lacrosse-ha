@@ -158,7 +158,7 @@ class JeeLinkCoordinator:
             self._track_unknown(m)
 
     def _track_unknown(self, m: LaCrosseMeasurement) -> None:
-        """Unbekannte ID aufzeichnen: Ersterfassung, Häufigkeit, letzter Wert."""
+        """Unbekannte ID aufzeichnen: Ersterfassung, Häufigkeit, letzte Messwerte."""
         now = time.time()
         rec = self.unknown_ids.get(m.sensor_id)
         if rec is None:
@@ -167,12 +167,14 @@ class JeeLinkCoordinator:
                 "last_seen": now,
                 "count": 1,
                 "temperature": m.temperature,
+                "humidity": m.humidity,
             }
             _LOGGER.info("Neue unbekannte LaCrosse-ID empfangen: %d", m.sensor_id)
         else:
             rec["last_seen"] = now
             rec["count"] += 1
             rec["temperature"] = m.temperature
+            rec["humidity"] = m.humidity
         self._dirty = True
 
     @callback
@@ -188,15 +190,18 @@ class JeeLinkCoordinator:
     def _load_unknown_ids(raw) -> dict[int, dict]:
         """unknown_ids aus dem Store laden – abwärtskompatibel.
 
-        Akzeptiert das aktuelle Format {id: {first_seen,last_seen,count,temperature}},
-        das ältere {id: first_seen} und das ursprüngliche [id, ...].
+        Akzeptiert das aktuelle Format
+        {id: {first_seen,last_seen,count,temperature,humidity}}, das ältere ohne
+        ``humidity``, das frühere {id: first_seen} und das ursprüngliche [id, ...].
         """
-        def _rec(first_seen=0.0, last_seen=0.0, count=0, temperature=None) -> dict:
+        def _rec(first_seen=0.0, last_seen=0.0, count=0,
+                 temperature=None, humidity=None) -> dict:
             return {
                 "first_seen": float(first_seen),
                 "last_seen": float(last_seen),
                 "count": int(count),
                 "temperature": temperature,
+                "humidity": humidity,
             }
 
         if isinstance(raw, dict):
@@ -205,7 +210,7 @@ class JeeLinkCoordinator:
                 if isinstance(v, dict):
                     out[int(k)] = _rec(
                         v.get("first_seen", 0.0), v.get("last_seen", 0.0),
-                        v.get("count", 0), v.get("temperature"),
+                        v.get("count", 0), v.get("temperature"), v.get("humidity"),
                     )
                 else:  # altes {id: first_seen}
                     out[int(k)] = _rec(first_seen=v, last_seen=v)
@@ -273,10 +278,28 @@ class JeeLinkCoordinator:
         )
 
     def candidate_label(self, uid: int) -> str:
-        """Label eines Kandidaten inkl. letztem Messwert (zur Unterscheidung mehrerer)."""
-        rec = self.unknown_ids.get(uid) or {}
+        """Label eines Kandidaten inkl. letzter Messwerte (zur Unterscheidung mehrerer)."""
+        return self._unknown_label(uid, self.unknown_ids.get(uid) or {})
+
+    @staticmethod
+    def _unknown_label(uid: int, rec: dict) -> str:
+        """ID mit den zuletzt empfangenen Messwerten als Anzeige-/Auswahlhilfe."""
+        parts: list[str] = []
         temp = rec.get("temperature")
-        return f"{uid} ({temp:.1f} °C)" if temp is not None else f"{uid}"
+        if temp is not None:
+            parts.append(f"{temp:.1f} °C")
+        hum = rec.get("humidity")
+        if hum is not None:
+            parts.append(f"{hum} %")
+        return f"{uid} ({', '.join(parts)})" if parts else f"{uid}"
+
+    def unknown_id_options(self) -> dict[str, str]:
+        """``{str(id): Label}`` aller gesehenen unbekannten IDs (nach ID sortiert).
+
+        Dient als Dropdown-Vorauswahl beim Hinzufügen eines Sensors: man wählt eine
+        tatsächlich empfangene ID samt letzter Messwerte, statt eine Zahl zu raten.
+        """
+        return {str(uid): self.candidate_label(uid) for uid in sorted(self.unknown_ids)}
 
     async def _async_flush_store(self) -> None:
         """State periodisch persistieren. Ein per-Messung-Debounce würde bei

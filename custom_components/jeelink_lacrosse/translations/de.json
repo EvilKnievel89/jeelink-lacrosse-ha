@@ -66,7 +66,7 @@
       },
       "add_sensor": {
         "title": "Sensor hinzufügen",
-        "description": "Zuletzt empfangene unbekannte IDs: {unknown_ids}.\nGib die LaCrosse-ID und einen Namen ein.",
+        "description": "Wähle eine empfangene LaCrosse-ID aus der Liste – der Wert in Klammern ist der letzte Messwert – oder gib eine andere ID ein. Vergib anschließend einen Namen.",
         "data": {
           "lacrosse_id": "LaCrosse-ID",
           "friendly_name": "Name"
@@ -96,6 +96,7 @@
     "error": {
       "id_in_use": "Diese LaCrosse-ID ist bereits einem anderen Sensor zugewiesen.",
       "name_required": "Bitte gib einen Namen ein.",
+      "invalid_id": "Bitte gib eine gültige LaCrosse-ID zwischen 0 und 255 ein.",
       "unknown_sensor": "Unbekannter Sensor.",
       "unknown": "Die Änderung konnte nicht gespeichert werden."
     }

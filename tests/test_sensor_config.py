@@ -129,6 +129,28 @@ def test_remove_sensor_unknown_slug_raises():
         sc.remove_sensor(_opts(), "nope")
 
 
+# --- parse_id (ID-Validierung des Hinzufügen-Dropdowns) ----------------------
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("56", 56),       # Dropdown-Wert / Freitext als String
+        (56, 56),         # bereits int
+        ("0", 0),         # untere Grenze
+        ("255", 255),     # obere Grenze
+        ("  5  ", 5),     # umschließende Leerzeichen (int() toleriert sie)
+        ("256", None),    # über dem Bereich
+        ("-1", None),     # unter dem Bereich
+        ("5.0", None),    # kein Integer
+        ("abc", None),    # nicht numerisch
+        ("", None),       # leer
+        (None, None),     # nichts ausgewählt/eingegeben
+    ],
+)
+def test_parse_id(raw, expected):
+    assert sc.parse_id(raw) == expected
+
+
 # --- sensor_labels / id_in_use ----------------------------------------------
 
 def test_sensor_labels():

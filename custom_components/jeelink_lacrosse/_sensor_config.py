@@ -22,6 +22,22 @@ from .const import CONF_LACROSSE_ID, CONF_SENSORS
 
 FRIENDLY_NAME = "friendly_name"
 
+# LaCrosse-IT+-Sende-ID passt in ein Byte.
+ID_MIN, ID_MAX = 0, 255
+
+
+def parse_id(raw) -> int | None:
+    """Eingabe (Dropdown-Wert oder Freitext) zu gültiger LaCrosse-ID, sonst None.
+
+    Akzeptiert nur ganzzahlige Werte im erlaubten Bereich; "5.0", "", "abc" oder
+    Werte außerhalb 0..255 ergeben None (-> Fehler ``invalid_id`` im Formular).
+    """
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if ID_MIN <= value <= ID_MAX else None
+
 
 class SensorConfigError(ValueError):
     """Basis für Validierungsfehler. ``error_key`` landet im Formular (errors[base])."""

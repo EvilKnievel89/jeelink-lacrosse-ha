@@ -44,8 +44,9 @@ async def test_add_sensor_flow_creates_entry(hass):
     assert result["type"] == "form"
     assert result["step_id"] == "add_sensor"
 
+    # Das ID-Feld ist jetzt ein Dropdown (SelectSelector, custom_value) -> String
     result = await options.async_configure(
-        result["flow_id"], {CONF_LACROSSE_ID: 56, "friendly_name": "Badezimmer"}
+        result["flow_id"], {CONF_LACROSSE_ID: "56", "friendly_name": "Badezimmer"}
     )
     assert result["type"] == "create_entry"
     assert entry.options[CONF_SENSORS]["badezimmer"][CONF_LACROSSE_ID] == 56
@@ -60,10 +61,26 @@ async def test_add_sensor_duplicate_id_shows_error(hass):
         result["flow_id"], {"next_step_id": "add_sensor"}
     )
     result = await options.async_configure(
-        result["flow_id"], {CONF_LACROSSE_ID: 56, "friendly_name": "Zweitname"}
+        result["flow_id"], {CONF_LACROSSE_ID: "56", "friendly_name": "Zweitname"}
     )
     assert result["type"] == "form"
     assert result["errors"] == {"base": "id_in_use"}
+
+
+async def test_add_sensor_out_of_range_id_shows_error(hass):
+    entry = _entry(hass, {})
+    options = hass.config_entries.options
+
+    result = await options.async_init(entry.entry_id)
+    result = await options.async_configure(
+        result["flow_id"], {"next_step_id": "add_sensor"}
+    )
+    # custom_value lässt Freitext durch -> Bereichsprüfung im Handler (0..255)
+    result = await options.async_configure(
+        result["flow_id"], {CONF_LACROSSE_ID: "999", "friendly_name": "Zuviel"}
+    )
+    assert result["type"] == "form"
+    assert result["errors"] == {"base": "invalid_id"}
 
 
 async def test_edit_sensor_flow(hass):

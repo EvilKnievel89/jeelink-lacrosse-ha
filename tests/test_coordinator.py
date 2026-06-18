@@ -116,12 +116,13 @@ async def test_async_start_prunes_configured_ids_from_unknown():
     assert 56 not in coord.unknown_ids
 
 
-def _rec(first_seen, count=3, temperature=22.0, last_seen=None):
+def _rec(first_seen, count=3, temperature=22.0, last_seen=None, humidity=None):
     return {
         "first_seen": first_seen,
         "last_seen": first_seen if last_seen is None else last_seen,
         "count": count,
         "temperature": temperature,
+        "humidity": humidity,
     }
 
 
@@ -154,15 +155,18 @@ async def test_replacement_candidates_empty_without_offline():
 def test_load_unknown_ids_accepts_all_formats():
     # altes Listenformat
     assert JeeLinkCoordinator._load_unknown_ids([1, 2]) == {
-        1: {"first_seen": 0.0, "last_seen": 0.0, "count": 0, "temperature": None},
-        2: {"first_seen": 0.0, "last_seen": 0.0, "count": 0, "temperature": None},
+        1: {"first_seen": 0.0, "last_seen": 0.0, "count": 0, "temperature": None, "humidity": None},
+        2: {"first_seen": 0.0, "last_seen": 0.0, "count": 0, "temperature": None, "humidity": None},
     }
     # zwischenzeitliches {id: first_seen}
     assert JeeLinkCoordinator._load_unknown_ids({"1": 10.0}) == {
-        1: {"first_seen": 10.0, "last_seen": 10.0, "count": 0, "temperature": None},
+        1: {"first_seen": 10.0, "last_seen": 10.0, "count": 0, "temperature": None, "humidity": None},
     }
-    # aktuelles Record-Format
-    rec = {"first_seen": 5.0, "last_seen": 9.0, "count": 4, "temperature": 21.0}
+    # Record-Format VOR dieser Änderung (ohne humidity) -> humidity wird ergänzt
+    old = {"first_seen": 1.0, "last_seen": 2.0, "count": 2, "temperature": 19.0}
+    assert JeeLinkCoordinator._load_unknown_ids({"5": old}) == {5: {**old, "humidity": None}}
+    # aktuelles Record-Format inkl. humidity
+    rec = {"first_seen": 5.0, "last_seen": 9.0, "count": 4, "temperature": 21.0, "humidity": 48}
     assert JeeLinkCoordinator._load_unknown_ids({"7": rec}) == {7: rec}
     assert JeeLinkCoordinator._load_unknown_ids(None) == {}
 
@@ -195,6 +199,26 @@ async def test_unknown_id_is_tracked():
         await coord._on_measurement(parse_line("OK 9 99 1 4 156 37"))  # ID 99 unkonfiguriert
 
     assert 99 in coord.unknown_ids
+    rec = coord.unknown_ids[99]
+    assert rec["count"] == 1
+    assert rec["temperature"] == 18.0      # letzte Messwerte mitgeschrieben
+    assert rec["humidity"] == 37
+
+
+async def test_unknown_id_options_lists_seen_ids_with_last_values():
+    """Hinzufügen-Dropdown: gesehene IDs nach ID sortiert, Label mit letzten Werten."""
+    coord = JeeLinkCoordinator(_make_hass(), _make_entry())
+    coord.unknown_ids = {
+        40: _rec(0.0, temperature=21.5, humidity=48),
+        7: _rec(0.0, temperature=None, humidity=None),
+        18: _rec(0.0, temperature=5.0, humidity=None),
+    }
+    opts = coord.unknown_id_options()
+
+    assert list(opts.keys()) == ["7", "18", "40"]   # nach ID sortiert, Keys als str
+    assert opts["40"] == "40 (21.5 °C, 48 %)"        # Temperatur + Feuchte
+    assert opts["18"] == "18 (5.0 °C)"               # nur Temperatur
+    assert opts["7"] == "7"                          # noch keine Werte
 
 
 async def test_register_and_unregister_listener_no_crash():

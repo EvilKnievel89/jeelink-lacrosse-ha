@@ -19,6 +19,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import OptionsFlow
+from homeassistant.helpers import selector
 
 from . import _sensor_config as sc
 from .const import CONF_LACROSSE_ID, CONF_SENSORS, DOMAIN
@@ -28,8 +29,8 @@ _LOGGER = logging.getLogger(__name__)
 FRIENDLY_NAME = sc.FRIENDLY_NAME
 CONF_SENSOR = "sensor"
 
-# LaCrosse-IT+-Sende-ID passt in ein Byte
-_ID_FIELD = vol.All(vol.Coerce(int), vol.Range(min=0, max=255))
+# LaCrosse-IT+-Sende-ID passt in ein Byte (Validierung in _sensor_config)
+_ID_FIELD = vol.All(vol.Coerce(int), vol.Range(min=sc.ID_MIN, max=sc.ID_MAX))
 
 
 class JeeLinkOptionsFlow(OptionsFlow):
@@ -54,20 +55,37 @@ class JeeLinkOptionsFlow(OptionsFlow):
     ) -> dict[str, Any]:
         errors: dict[str, str] = {}
         if user_input is not None:
-            try:
-                new_options = sc.add_sensor(
-                    self.config_entry.options,
-                    user_input[CONF_LACROSSE_ID],
-                    user_input[FRIENDLY_NAME],
-                )
-            except sc.SensorConfigError as err:
-                errors["base"] = err.error_key
+            lacrosse_id = sc.parse_id(user_input[CONF_LACROSSE_ID])
+            if lacrosse_id is None:
+                errors["base"] = "invalid_id"
             else:
-                return self.async_create_entry(title="", data=new_options)
+                try:
+                    new_options = sc.add_sensor(
+                        self.config_entry.options,
+                        lacrosse_id,
+                        user_input[FRIENDLY_NAME],
+                    )
+                except sc.SensorConfigError as err:
+                    errors["base"] = err.error_key
+                else:
+                    return self.async_create_entry(title="", data=new_options)
 
+        # Dropdown der zuletzt empfangenen, noch unbekannten IDs (mit letzten
+        # Messwerten als Auswahlhilfe). custom_value lässt zusätzlich eine ID von
+        # Hand eintippen – z. B. bei Ersteinrichtung, bevor der Sensor gehört wurde.
+        options = [
+            selector.SelectOptionDict(value=value, label=label)
+            for value, label in self._unknown_id_options().items()
+        ]
         schema = vol.Schema(
             {
-                vol.Required(CONF_LACROSSE_ID): _ID_FIELD,
+                vol.Required(CONF_LACROSSE_ID): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        custom_value=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Required(FRIENDLY_NAME): str,
             }
         )
@@ -75,7 +93,6 @@ class JeeLinkOptionsFlow(OptionsFlow):
             step_id="add_sensor",
             data_schema=schema,
             errors=errors,
-            description_placeholders={"unknown_ids": self._unknown_ids_text()},
         )
 
     # --- Bearbeiten ---------------------------------------------------------
@@ -151,8 +168,9 @@ class JeeLinkOptionsFlow(OptionsFlow):
     def _sensors(self) -> dict:
         return self.config_entry.options.get(CONF_SENSORS, {})
 
-    def _unknown_ids_text(self) -> str:
+    def _unknown_id_options(self) -> dict[str, str]:
+        """``{str(id): Label}`` der gesehenen, noch unbekannten IDs (oder leer)."""
         coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
-        if coordinator and coordinator.unknown_ids:
-            return ", ".join(str(i) for i in sorted(coordinator.unknown_ids))
-        return "—"
+        if coordinator is None:
+            return {}
+        return coordinator.unknown_id_options()
