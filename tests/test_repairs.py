@@ -18,7 +18,7 @@ from custom_components.jeelink_lacrosse import _sensor_config as sc
 from custom_components.jeelink_lacrosse import repairs
 from custom_components.jeelink_lacrosse.const import (
     CONF_DEVICE, CONF_BAUD, CONF_SENSORS, CONF_LACROSSE_ID, DOMAIN,
-    OFFLINE_THRESHOLD_MINUTES,
+    DEFAULT_OFFLINE_THRESHOLD_MINUTES,
 )
 from custom_components.jeelink_lacrosse.coordinator import (
     JeeLinkCoordinator, SensorState,
@@ -210,7 +210,7 @@ def _coord_entry():
 def _offline_coord():
     coord = JeeLinkCoordinator(MagicMock(), _coord_entry())
     state = SensorState(56, "Bad")
-    state.last_seen = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60 + 100)
+    state.last_seen = time.time() - (DEFAULT_OFFLINE_THRESHOLD_MINUTES * 60 + 100)
     coord.sensors = {"bad": state}
     return coord
 
@@ -390,7 +390,7 @@ def test_new_sensor_candidates_excludes_replacement_candidates():
 def test_new_sensor_candidates_ignores_oneshot_and_stale():
     coord = _online_coord()
     now = time.time()
-    stale = now - (OFFLINE_THRESHOLD_MINUTES * 60 + 100)
+    stale = now - (DEFAULT_OFFLINE_THRESHOLD_MINUTES * 60 + 100)
     coord.unknown_ids = {
         10: {"first_seen": now, "last_seen": now, "count": 1, "temperature": 5.0},   # Einmal-Paket
         20: {"first_seen": now, "last_seen": stale, "count": 5, "temperature": 5.0}, # verstummt

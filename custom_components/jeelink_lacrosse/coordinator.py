@@ -16,8 +16,8 @@ from homeassistant.helpers.storage import Store
 from .const import (
     DOMAIN,
     CONF_DEVICE, CONF_BAUD, DEFAULT_BAUD,
-    CONF_SENSORS, CONF_LACROSSE_ID,
-    OFFLINE_THRESHOLD_MINUTES,
+    CONF_SENSORS, CONF_LACROSSE_ID, CONF_OFFLINE_THRESHOLD,
+    DEFAULT_OFFLINE_THRESHOLD_MINUTES,
     CHECK_INTERVAL_MINUTES,
 )
 from .protocol import LaCrosseMeasurement
@@ -55,6 +55,12 @@ class JeeLinkCoordinator:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
+        # Offline-/Verfügbarkeits-Schwelle: konfigurierbar je Eintrag, sonst Default.
+        # Eine Options-Änderung lädt den Eintrag neu (frischer Coordinator), daher
+        # genügt das einmalige Lesen hier.
+        self.offline_threshold_minutes: int = entry.options.get(
+            CONF_OFFLINE_THRESHOLD, DEFAULT_OFFLINE_THRESHOLD_MINUTES
+        )
         self.sensors: dict[str, SensorState] = {}
         # Unbekannte (unkonfigurierte) IDs -> Aufzeichnung je ID:
         #   {"first_seen", "last_seen", "count", "temperature"}.
@@ -243,14 +249,14 @@ class JeeLinkCoordinator:
         state = self.sensors.get(slug)
         if not state or state.last_seen == 0:
             return False
-        return (time.time() - state.last_seen) < OFFLINE_THRESHOLD_MINUTES * 60
+        return (time.time() - state.last_seen) < self.offline_threshold_minutes * 60
 
     # --- Offline-Erkennung und ID-Neuzuweisung ------------------------------
 
     def _offline_sensors(self) -> dict[str, SensorState]:
         """Konfigurierte Sensoren, die schon empfangen wurden, aber jetzt als
         offline gelten (länger als die Schwelle still)."""
-        offline_threshold = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60)
+        offline_threshold = time.time() - (self.offline_threshold_minutes * 60)
         return {
             slug: state for slug, state in self.sensors.items()
             if state.last_seen > 0 and state.last_seen < offline_threshold
@@ -269,7 +275,7 @@ class JeeLinkCoordinator:
         if not offline:
             return []
         earliest_offline = min(state.last_seen for state in offline.values())
-        active_after = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60)
+        active_after = time.time() - (self.offline_threshold_minutes * 60)
         return sorted(
             uid for uid, rec in self.unknown_ids.items()
             if rec["first_seen"] >= earliest_offline
@@ -287,7 +293,7 @@ class JeeLinkCoordinator:
         Letztere laufen über das ``id_replacement``-Issue; der Ausschluss verhindert,
         dass dieselbe ID doppelt (als "neu" UND als "Ersatz") gemeldet wird.
         """
-        active_after = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60)
+        active_after = time.time() - (self.offline_threshold_minutes * 60)
         replacement = set(self.replacement_candidates())
         return sorted(
             uid for uid, rec in self.unknown_ids.items()
@@ -362,7 +368,7 @@ class JeeLinkCoordinator:
             if was_available and not state.available:
                 _LOGGER.info(
                     "Sensor '%s' ist offline (keine Daten > %d min)",
-                    slug, OFFLINE_THRESHOLD_MINUTES,
+                    slug, self.offline_threshold_minutes,
                 )
                 for cb in self._listeners.get(slug, []):
                     cb()

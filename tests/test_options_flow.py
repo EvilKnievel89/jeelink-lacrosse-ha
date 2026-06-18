@@ -15,7 +15,8 @@ if not hasattr(ce, "OptionsFlow"):
     )
 
 from custom_components.jeelink_lacrosse.const import (  # noqa: E402
-    CONF_DEVICE, CONF_BAUD, CONF_LACROSSE_ID, CONF_SENSORS, DOMAIN,
+    CONF_DEVICE, CONF_BAUD, CONF_LACROSSE_ID, CONF_OFFLINE_THRESHOLD,
+    CONF_SENSORS, DOMAIN,
 )
 
 _DATA = {CONF_DEVICE: "/dev/ttyUSB0", CONF_BAUD: 57600}
@@ -123,3 +124,24 @@ async def test_remove_sensor_flow(hass):
     assert result["type"] == "create_entry"
     assert "bad" not in entry.options[CONF_SENSORS]
     assert "kel" in entry.options[CONF_SENSORS]
+
+
+async def test_settings_flow_sets_offline_threshold(hass):
+    entry = _entry(hass, {})
+    options = hass.config_entries.options
+
+    result = await options.async_init(entry.entry_id)
+    assert result["type"] == "menu"
+    result = await options.async_configure(
+        result["flow_id"], {"next_step_id": "settings"}
+    )
+    assert result["type"] == "form"
+    assert result["step_id"] == "settings"
+
+    result = await options.async_configure(
+        result["flow_id"], {CONF_OFFLINE_THRESHOLD: 45}
+    )
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_OFFLINE_THRESHOLD] == 45
+    # Sensor-Mapping bleibt erhalten
+    assert CONF_SENSORS in entry.options

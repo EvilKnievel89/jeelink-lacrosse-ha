@@ -18,7 +18,7 @@ from custom_components.jeelink_lacrosse.coordinator import (
 )
 from custom_components.jeelink_lacrosse.const import (
     CONF_DEVICE, CONF_BAUD, CONF_SENSORS, CONF_LACROSSE_ID,
-    OFFLINE_THRESHOLD_MINUTES,
+    CONF_OFFLINE_THRESHOLD, DEFAULT_OFFLINE_THRESHOLD_MINUTES,
 )
 from custom_components.jeelink_lacrosse.protocol import parse_line
 
@@ -131,7 +131,7 @@ async def test_replacement_candidates_only_established_ids_after_offline():
     empfangen wurden (kein Einmal-Burst)."""
     coord = JeeLinkCoordinator(_make_hass(), _make_entry())
     state = SensorState(56, "Badezimmer")
-    state.last_seen = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60 + 100)  # offline
+    state.last_seen = time.time() - (DEFAULT_OFFLINE_THRESHOLD_MINUTES * 60 + 100)  # offline
     coord.sensors = {"bad": state}
     now = time.time()
     coord.unknown_ids = {
@@ -258,8 +258,28 @@ async def test_is_available_uses_offline_threshold():
     coord.sensors["bad"].last_seen = time.time()
     assert coord.is_available("bad") is True         # gerade gesehen
 
-    coord.sensors["bad"].last_seen = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60 + 10)
+    coord.sensors["bad"].last_seen = time.time() - (DEFAULT_OFFLINE_THRESHOLD_MINUTES * 60 + 10)
     assert coord.is_available("bad") is False         # älter als Schwelle
+
+
+async def test_offline_threshold_defaults_to_30():
+    coord = JeeLinkCoordinator(_make_hass(), _make_entry())
+    assert DEFAULT_OFFLINE_THRESHOLD_MINUTES == 30
+    assert coord.offline_threshold_minutes == 30
+
+
+async def test_offline_threshold_is_configurable_via_options():
+    """entry.options[CONF_OFFLINE_THRESHOLD] überschreibt den Default."""
+    entry = _make_entry()
+    entry.options = {**entry.options, CONF_OFFLINE_THRESHOLD: 10}
+    coord = JeeLinkCoordinator(_make_hass(), entry)
+    assert coord.offline_threshold_minutes == 10
+
+    coord.sensors["bad"] = SensorState(56, "Badezimmer")
+    coord.sensors["bad"].last_seen = time.time() - (5 * 60)        # 5 min < 10 min
+    assert coord.is_available("bad") is True
+    coord.sensors["bad"].last_seen = time.time() - (10 * 60 + 5)   # älter als 10 min
+    assert coord.is_available("bad") is False
 
 
 async def test_async_stop_cancels_timer_and_flushes_store():

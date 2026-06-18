@@ -87,7 +87,8 @@
         "menu_options": {
           "add_sensor": "Sensor hinzufügen",
           "edit_sensor": "Sensor bearbeiten",
-          "remove_sensor": "Sensor entfernen"
+          "remove_sensor": "Sensor entfernen",
+          "settings": "Einstellungen"
         }
       },
       "add_sensor": {
@@ -116,6 +117,13 @@
         "title": "Sensor entfernen",
         "data": {
           "sensor": "Sensor"
+        }
+      },
+      "settings": {
+        "title": "Einstellungen",
+        "description": "Wie lange ein Sensor stillbleiben darf, bevor er als nicht verfügbar markiert wird (und seine Kachel ausgegraut wird).",
+        "data": {
+          "offline_threshold": "Offline-Schwelle (Minuten)"
         }
       }
     },

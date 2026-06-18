@@ -87,7 +87,8 @@
         "menu_options": {
           "add_sensor": "Add sensor",
           "edit_sensor": "Edit sensor",
-          "remove_sensor": "Remove sensor"
+          "remove_sensor": "Remove sensor",
+          "settings": "Settings"
         }
       },
       "add_sensor": {
@@ -116,6 +117,13 @@
         "title": "Remove sensor",
         "data": {
           "sensor": "Sensor"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "How long a sensor may stay silent before it is marked unavailable (and its tile greys out).",
+        "data": {
+          "offline_threshold": "Offline threshold (minutes)"
         }
       }
     },

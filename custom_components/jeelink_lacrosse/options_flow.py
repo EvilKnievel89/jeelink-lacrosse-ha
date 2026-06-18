@@ -23,7 +23,13 @@ from homeassistant.config_entries import OptionsFlow
 from homeassistant.helpers import selector
 
 from . import _sensor_config as sc
-from .const import CONF_LACROSSE_ID, CONF_SENSORS, DOMAIN
+from .const import (
+    CONF_LACROSSE_ID,
+    CONF_OFFLINE_THRESHOLD,
+    CONF_SENSORS,
+    DEFAULT_OFFLINE_THRESHOLD_MINUTES,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +50,7 @@ class JeeLinkOptionsFlow(OptionsFlow):
         menu = ["add_sensor"]
         if self._sensors():
             menu += ["edit_sensor", "remove_sensor"]
+        menu += ["settings"]
         return self.async_show_menu(step_id="init", menu_options=menu)
 
     # --- Hinzufügen ---------------------------------------------------------
@@ -153,6 +160,44 @@ class JeeLinkOptionsFlow(OptionsFlow):
             {vol.Required(CONF_SENSOR): vol.In(sc.sensor_labels(self.config_entry.options))}
         )
         return self.async_show_form(step_id="remove_sensor", data_schema=schema)
+
+    # --- Einstellungen ------------------------------------------------------
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Offline-Schwelle (Minuten) je Eintrag festlegen.
+
+        Schreibt nur den Schwellen-Schlüssel und lässt das Sensor-Mapping
+        unangetastet; die Options-Änderung lädt den Eintrag neu, sodass der
+        Coordinator den neuen Wert übernimmt.
+        """
+        if user_input is not None:
+            new_options = dict(self.config_entry.options)
+            new_options[CONF_OFFLINE_THRESHOLD] = int(
+                user_input[CONF_OFFLINE_THRESHOLD]
+            )
+            return self.async_create_entry(title="", data=new_options)
+
+        current = self.config_entry.options.get(
+            CONF_OFFLINE_THRESHOLD, DEFAULT_OFFLINE_THRESHOLD_MINUTES
+        )
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_OFFLINE_THRESHOLD, default=current
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=1440,
+                        step=1,
+                        unit_of_measurement="min",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="settings", data_schema=schema)
 
     # --- Hilfen -------------------------------------------------------------
 
