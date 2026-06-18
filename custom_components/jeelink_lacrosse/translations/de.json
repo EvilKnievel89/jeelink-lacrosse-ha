@@ -44,6 +44,32 @@
           "already_resolved": "Nichts mehr zu tun – der Sensor ist wieder online oder die unbekannte ID ist verschwunden."
         }
       }
+    },
+    "new_sensor": {
+      "title": "Neuer LaCrosse-Sensor erkannt ({new_ids})",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Erkannten Sensor hinzufügen",
+            "description": "Neu empfangene, noch nicht konfigurierte LaCrosse-ID(s): {new_ids}.\nWähle eine aus – der Wert in Klammern ist der letzte Messwert – und vergib einen Namen, um sie als Sensor anzulegen.",
+            "data": {
+              "new_id": "LaCrosse-ID",
+              "friendly_name": "Name"
+            }
+          }
+        },
+        "abort": {
+          "entry_not_loaded": "Die Integration ist gerade nicht geladen. Das Problem bleibt offen und kann später behoben werden.",
+          "already_resolved": "Nichts mehr zu tun – der erkannte Sensor ist verschwunden oder wurde bereits hinzugefügt."
+        },
+        "error": {
+          "id_in_use": "Diese LaCrosse-ID ist bereits einem anderen Sensor zugewiesen.",
+          "name_required": "Bitte gib einen Namen ein.",
+          "invalid_id": "Bitte gib eine gültige LaCrosse-ID zwischen 0 und 255 ein.",
+          "unknown_sensor": "Unbekannter Sensor.",
+          "unknown": "Der Sensor konnte nicht hinzugefügt werden."
+        }
+      }
     }
   },
   "entity": {

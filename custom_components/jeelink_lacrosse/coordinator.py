@@ -277,6 +277,25 @@ class JeeLinkCoordinator:
             and rec["last_seen"] >= active_after
         )
 
+    def new_sensor_candidates(self) -> list[int]:
+        """Plausibel NEUE (noch nicht konfigurierte) Sensoren – kein Batteriewechsel.
+
+        Eine unbekannte ID zählt, wenn sie
+          1. MEHRFACH empfangen wurde (kein einmaliger Einschalt-/Rauschburst) und
+          2. aktuell noch sendet,
+        aber NICHT bereits als Batteriewechsel-Kandidat eines offline Sensors gilt.
+        Letztere laufen über das ``id_replacement``-Issue; der Ausschluss verhindert,
+        dass dieselbe ID doppelt (als "neu" UND als "Ersatz") gemeldet wird.
+        """
+        active_after = time.time() - (OFFLINE_THRESHOLD_MINUTES * 60)
+        replacement = set(self.replacement_candidates())
+        return sorted(
+            uid for uid, rec in self.unknown_ids.items()
+            if uid not in replacement
+            and rec["count"] >= MIN_REPLACEMENT_SIGHTINGS
+            and rec["last_seen"] >= active_after
+        )
+
     def candidate_label(self, uid: int) -> str:
         """Label eines Kandidaten inkl. letzter Messwerte (zur Unterscheidung mehrerer)."""
         return self._unknown_label(uid, self.unknown_ids.get(uid) or {})
@@ -317,6 +336,8 @@ class JeeLinkCoordinator:
         from .repairs import (
             async_create_id_replacement_issue,
             async_delete_id_replacement_issue,
+            async_create_new_sensor_issue,
+            async_delete_new_sensor_issue,
         )
         if offline and candidates:
             await async_create_id_replacement_issue(
@@ -325,6 +346,15 @@ class JeeLinkCoordinator:
         else:
             # Lage erledigt -> ggf. bestehendes Issue zurückziehen (Reconcile).
             async_delete_id_replacement_issue(self.hass, self.entry.entry_id)
+
+        # Neu erkannte, noch nicht konfigurierte Sensoren separat melden (Reconcile).
+        new_sensors = self.new_sensor_candidates()
+        if new_sensors:
+            await async_create_new_sensor_issue(
+                self.hass, self.entry.entry_id, new_sensors
+            )
+        else:
+            async_delete_new_sensor_issue(self.hass, self.entry.entry_id)
 
         for slug, state in self.sensors.items():
             was_available = state.available
@@ -358,4 +388,27 @@ class JeeLinkCoordinator:
         if slug in new_options.get(CONF_SENSORS, {}):
             new_options[CONF_SENSORS][slug][CONF_LACROSSE_ID] = new_lacrosse_id
 
+        self.hass.config_entries.async_update_entry(self.entry, options=new_options)
+
+    async def add_sensor(self, lacrosse_id: int, friendly_name: str) -> None:
+        """
+        Neuen Sensor anlegen (vom Repairs-Flow "Neuer Sensor erkannt" aufgerufen).
+        Das ID-Mapping ist echte Konfiguration -> schreibt entry.options (löst über
+        den Update-Listener einen Reload aus; selten und gewollt).
+
+        Wirft ``_sensor_config.SensorConfigError`` bei belegter/ungültiger ID oder
+        leerem Namen, BEVOR irgendetwas mutiert wird – der Flow zeigt dann den Fehler.
+        """
+        # Lazy-Import wie bei .repairs: _sensor_config wird sonst über das Paket-
+        # __init__ (das den Coordinator importiert) zirkulär gezogen.
+        from . import _sensor_config as sc
+
+        new_options = sc.add_sensor(self.entry.options, lacrosse_id, friendly_name)
+
+        _LOGGER.info(
+            "Neuen Sensor '%s' (LaCrosse-ID %d) angelegt", friendly_name, lacrosse_id
+        )
+        self.unknown_ids.pop(lacrosse_id, None)
+        await self._store.async_save(self._data_to_store())
+        self._dirty = False
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
