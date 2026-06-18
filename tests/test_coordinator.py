@@ -104,6 +104,18 @@ async def test_async_start_loads_state_and_stores_unsub():
     assert coord._unsub_interval is _INTERVAL["unsub"]
 
 
+async def test_async_start_prunes_configured_ids_from_unknown():
+    """Live-Fund: nach Anlegen via Options-Flow darf die ID nicht in unknown_ids bleiben."""
+    with _env():
+        coord = JeeLinkCoordinator(_make_hass(), _make_entry())
+        # 56 ist konfiguriert (Sensor "bad"), 7 ist echt unbekannt
+        coord._store.preset = {"last_seen": {}, "unknown_ids": [56, 7]}
+        await coord.async_start()
+
+    assert coord.unknown_ids == {7}            # 56 wurde entfernt
+    assert 56 not in coord.unknown_ids
+
+
 async def test_on_measurement_updates_state_and_battery_fields():
     with _env():
         coord = JeeLinkCoordinator(_make_hass(), _make_entry())

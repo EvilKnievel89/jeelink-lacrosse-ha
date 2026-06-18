@@ -78,6 +78,19 @@ class JeeLinkCoordinator:
             state.last_seen = last_seen_map.get(slug, 0.0)
             self.sensors[slug] = state
 
+        # Bereits konfigurierte IDs nicht weiter als "unbekannt" führen. Sonst
+        # bleibt die ID nach dem Anlegen über den Options-Flow in unknown_ids
+        # hängen (falscher Hinweis im "Sensor hinzufügen"-Dialog, unnötige
+        # Replacement-Erkennung). Greift bei jedem (Re-)Start, also genau dann,
+        # wenn eine Options-Änderung wirksam wird.
+        configured_ids = {state.lacrosse_id for state in self.sensors.values()}
+        stale_unknown = self.unknown_ids & configured_ids
+        if stale_unknown:
+            self.unknown_ids -= configured_ids
+            _LOGGER.debug(
+                "Konfigurierte IDs aus unknown_ids entfernt: %s", sorted(stale_unknown)
+            )
+
         # Verbindungsdaten stehen in entry.data (Config Flow), Sensoren in entry.options
         self._reader = JeeLinkSerialReader(
             device=self.entry.data[CONF_DEVICE],
