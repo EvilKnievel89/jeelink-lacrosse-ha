@@ -3,12 +3,12 @@
 1. Stellt sicher, dass das Repo-Root auf sys.path liegt ("custom_components" als
    Namespace-Paket).
 2. Installiert schlanke Home-Assistant-Import-Stubs – ABER nur, wenn kein echter
-   HA-Core installiert ist. So laufen die reinen protocol/serial_reader/coordinator-
-   Tests auch ohne HA, während ein echtes HA-Dev-Setup unangetastet bleibt.
+   HA-Core installiert ist. So laufen die reinen Modul-Tests auch ohne HA, während
+   ein echtes HA-Dev-Setup unangetastet bleibt.
 
-Die Stubs decken nur die Symbole ab, die __init__.py und coordinator.py beim
-*Import* brauchen. Das konkrete Laufzeitverhalten (Store, Timer) patchen die
-einzelnen Tests selbst.
+Die Stubs decken nur die Symbole ab, die die Integrationsmodule beim *Import*
+brauchen. Das konkrete Laufzeitverhalten (Store, Timer, Entity-State) patchen bzw.
+prüfen die einzelnen Tests selbst.
 """
 import os
 import sys
@@ -33,6 +33,10 @@ def _install_ha_import_stubs() -> None:
     helpers = types.ModuleType("homeassistant.helpers")
     event = types.ModuleType("homeassistant.helpers.event")
     storage = types.ModuleType("homeassistant.helpers.storage")
+    device_registry = types.ModuleType("homeassistant.helpers.device_registry")
+    components = types.ModuleType("homeassistant.components")
+    sensor = types.ModuleType("homeassistant.components.sensor")
+    binary_sensor = types.ModuleType("homeassistant.components.binary_sensor")
 
     class HomeAssistant:  # nur als Typname (PEP 563: Annotations bleiben Strings)
         ...
@@ -44,23 +48,71 @@ def _install_ha_import_stubs() -> None:
         SENSOR = "sensor"
         BINARY_SENSOR = "binary_sensor"
 
+    class _UnitOfTemperature:
+        CELSIUS = "°C"
+
+    class _EntityCategory:
+        DIAGNOSTIC = "diagnostic"
+
     class _Store:  # Platzhalter; Tests patchen coordinator.Store mit eigenem Fake
         def __init__(self, *args, **kwargs):
             ...
 
+    class _EntityBase:
+        """Minimaler Entity-Ersatz.
+
+        Bildet das HA-Verhalten nach, Properties wie device_class/unique_id auf
+        _attr_<name> abzubilden, und zählt async_write_ha_state-Aufrufe.
+        """
+
+        def async_write_ha_state(self) -> None:
+            self._ha_state_writes = getattr(self, "_ha_state_writes", 0) + 1
+
+        def __getattr__(self, name: str):
+            # Nur für nicht gefundene Public-Namen: auf _attr_<name> zurückfallen.
+            if not name.startswith("_attr_"):
+                try:
+                    return object.__getattribute__(self, f"_attr_{name}")
+                except AttributeError:
+                    pass
+            raise AttributeError(name)
+
+    class _SensorDeviceClass:
+        TEMPERATURE = "temperature"
+        HUMIDITY = "humidity"
+
+    class _SensorStateClass:
+        MEASUREMENT = "measurement"
+
+    class _BinarySensorDeviceClass:
+        BATTERY = "battery"
+
     core.HomeAssistant = HomeAssistant
     core.callback = lambda fn: fn
     const.Platform = _Platform
+    const.UnitOfTemperature = _UnitOfTemperature
+    const.PERCENTAGE = "%"
+    const.EntityCategory = _EntityCategory
     config_entries.ConfigEntry = ConfigEntry
     event.async_track_time_interval = lambda *a, **k: MagicMock()
     storage.Store = _Store
+    device_registry.DeviceInfo = dict     # DeviceInfo(**kwargs) -> dict
+    sensor.SensorEntity = type("SensorEntity", (_EntityBase,), {})
+    sensor.SensorDeviceClass = _SensorDeviceClass
+    sensor.SensorStateClass = _SensorStateClass
+    binary_sensor.BinarySensorEntity = type("BinarySensorEntity", (_EntityBase,), {})
+    binary_sensor.BinarySensorDeviceClass = _BinarySensorDeviceClass
 
     ha.core = core
     ha.const = const
     ha.config_entries = config_entries
     ha.helpers = helpers
+    ha.components = components
     helpers.event = event
     helpers.storage = storage
+    helpers.device_registry = device_registry
+    components.sensor = sensor
+    components.binary_sensor = binary_sensor
 
     sys.modules.update(
         {
@@ -71,6 +123,10 @@ def _install_ha_import_stubs() -> None:
             "homeassistant.helpers": helpers,
             "homeassistant.helpers.event": event,
             "homeassistant.helpers.storage": storage,
+            "homeassistant.helpers.device_registry": device_registry,
+            "homeassistant.components": components,
+            "homeassistant.components.sensor": sensor,
+            "homeassistant.components.binary_sensor": binary_sensor,
         }
     )
 
