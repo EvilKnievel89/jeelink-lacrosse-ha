@@ -22,7 +22,7 @@ if not hasattr(ce, "ConfigFlow"):
 from unittest.mock import patch  # noqa: E402
 
 from custom_components.jeelink_lacrosse.const import (  # noqa: E402
-    DOMAIN, CONF_DEVICE, CONF_BAUD,
+    DOMAIN, CONF_DEVICE, CONF_BAUD, CONF_SENSORS, CONF_LACROSSE_ID,
 )
 from custom_components.jeelink_lacrosse.config_flow import MANUAL_PATH  # noqa: E402
 
@@ -110,3 +110,62 @@ async def test_duplicate_device_aborts(hass):
 
     assert result2["type"] == "abort"
     assert result2["reason"] == "already_configured"
+
+
+async def test_reconfigure_updates_connection(hass):
+    """Reconfigure ändert Port/Baud in entry.data und behält Sensoren/Verlauf."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="/dev/ttyUSB0",
+        data={CONF_DEVICE: "/dev/ttyUSB0", CONF_BAUD: 57600},
+        options={CONF_SENSORS: {"bad": {CONF_LACROSSE_ID: 56, "friendly_name": "Bad"}}},
+    )
+    entry.add_to_hass(hass)
+
+    new_path = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_ABC-if00-port0"
+    with patch(_LIST, return_value=_PORTS), \
+         patch(_TEST_CONN, return_value=True):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "reconfigure", "entry_id": entry.entry_id},
+        )
+        assert result["type"] == "form"
+        assert result["step_id"] == "reconfigure"
+
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICE: new_path, CONF_BAUD: 38400}
+        )
+
+    assert result2["type"] == "abort"
+    assert result2["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_DEVICE] == new_path
+    assert entry.data[CONF_BAUD] == 38400
+    # Sensor-Konfiguration bleibt erhalten
+    assert entry.options[CONF_SENSORS]["bad"][CONF_LACROSSE_ID] == 56
+
+
+async def test_reconfigure_cannot_connect_shows_error(hass):
+    """Fehlgeschlagener Verbindungstest -> Formular mit cannot_connect."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="/dev/ttyUSB0",
+        data={CONF_DEVICE: "/dev/ttyUSB0", CONF_BAUD: 57600},
+    )
+    entry.add_to_hass(hass)
+
+    with patch(_LIST, return_value=_PORTS), \
+         patch(_TEST_CONN, return_value=False):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "reconfigure", "entry_id": entry.entry_id},
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICE: "/dev/ttyUSB1", CONF_BAUD: 57600}
+        )
+
+    assert result2["type"] == "form"
+    assert result2["errors"] == {"base": "cannot_connect"}

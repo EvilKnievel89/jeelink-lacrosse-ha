@@ -15,6 +15,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import selector
 
 from .const import DOMAIN, CONF_DEVICE, CONF_BAUD, DEFAULT_BAUD
 from .options_flow import JeeLinkOptionsFlow
@@ -81,6 +82,76 @@ class JeeLinkConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(
             step_id="manual", data_schema=schema, errors=errors
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Verbindungsdaten (Port/Baud) eines bestehenden Eintrags ändern.
+
+        Wird über „Neu konfigurieren" im 3-Punkte-Menü der Integration aufgerufen
+        (z. B. wenn sich /dev/ttyUSBx nach dem Umstecken geändert hat). Aktualisiert
+        entry.data und lädt den Eintrag neu – Sensoren/Optionen und der Verlauf
+        bleiben erhalten. Die unique_id (ursprünglicher Pfad) wird bewusst NICHT
+        geändert: Sie dient nur der Duplikat-Erkennung beim Neu-Anlegen und hat
+        keinen Einfluss auf die Verbindung (der Coordinator liest entry.data).
+        """
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            device = user_input[CONF_DEVICE]
+            baud = user_input[CONF_BAUD]
+            if not await JeeLinkSerialReader.test_connection(device, baud):
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    title=f"JeeLink ({device})",
+                    data={**entry.data, CONF_DEVICE: device, CONF_BAUD: baud},
+                )
+
+        ports = await self.hass.async_add_executor_job(list_serial_ports)
+        current_device = (
+            user_input[CONF_DEVICE] if user_input else entry.data[CONF_DEVICE]
+        )
+        current_baud = (
+            user_input[CONF_BAUD]
+            if user_input
+            else entry.data.get(CONF_BAUD, DEFAULT_BAUD)
+        )
+
+        # Erkannte Ports zur Auswahl; custom_value lässt zusätzlich einen freien
+        # Pfad zu (empfohlen: /dev/serial/by-id/…). Aktuellen Pfad mit aufnehmen,
+        # falls der Stick gerade nicht (unter diesem Namen) erkannt wird.
+        options = [
+            selector.SelectOptionDict(value=path, label=label)
+            for path, label in ports.items()
+        ]
+        if current_device not in ports:
+            options.append(
+                selector.SelectOptionDict(value=current_device, label=current_device)
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_DEVICE, default=current_device
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        custom_value=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Required(CONF_BAUD, default=current_baud): cv.positive_int,
+            }
+        )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"current": entry.data[CONF_DEVICE]},
         )
 
     async def _async_validate_and_create(

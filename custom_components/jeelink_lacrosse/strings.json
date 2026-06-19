@@ -16,13 +16,22 @@
           "device": "Device path",
           "baud": "Baud rate"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure JeeLink connection",
+        "description": "Pick the serial port of your JeeLink, or type a path. Recommended: a stable /dev/serial/by-id/… path that does not change when you replug the stick. Current: {current}",
+        "data": {
+          "device": "Serial port",
+          "baud": "Baud rate"
+        }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to the JeeLink. Check the path and baud rate."
     },
     "abort": {
-      "already_configured": "This JeeLink is already configured."
+      "already_configured": "This JeeLink is already configured.",
+      "reconfigure_successful": "The JeeLink connection was updated."
     }
   },
   "issues": {

@@ -16,13 +16,22 @@
           "device": "Gerätepfad",
           "baud": "Baudrate"
         }
+      },
+      "reconfigure": {
+        "title": "JeeLink-Verbindung neu konfigurieren",
+        "description": "Wähle den seriellen Port deines JeeLink oder gib einen Pfad ein. Empfohlen: ein stabiler /dev/serial/by-id/…-Pfad, der sich beim Umstecken nicht ändert. Aktuell: {current}",
+        "data": {
+          "device": "Serieller Port",
+          "baud": "Baudrate"
+        }
       }
     },
     "error": {
       "cannot_connect": "Verbindung zum JeeLink fehlgeschlagen. Prüfe Pfad und Baudrate."
     },
     "abort": {
-      "already_configured": "Dieser JeeLink ist bereits eingerichtet."
+      "already_configured": "Dieser JeeLink ist bereits eingerichtet.",
+      "reconfigure_successful": "Die JeeLink-Verbindung wurde aktualisiert."
     }
   },
   "issues": {
