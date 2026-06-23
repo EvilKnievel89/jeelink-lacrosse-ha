@@ -319,12 +319,24 @@ class JeeLinkCoordinator:
         return f"{uid} ({', '.join(parts)})" if parts else f"{uid}"
 
     def unknown_id_options(self) -> dict[str, str]:
-        """``{str(id): Label}`` aller gesehenen unbekannten IDs (nach ID sortiert).
+        """``{str(id): Label}`` der KÜRZLICH gesehenen unbekannten IDs (nach ID sortiert).
 
         Dient als Dropdown-Vorauswahl beim Hinzufügen eines Sensors: man wählt eine
         tatsächlich empfangene ID samt letzter Messwerte, statt eine Zahl zu raten.
+
+        Entprellt das Dropdown: nur IDs, die innerhalb der Offline-Schwelle zuletzt
+        gesendet haben, erscheinen. Länger stille (z. B. durchziehende Fremd-/Alt-
+        Signale, die nur einmal im Store gelandet sind) werden ausgeblendet – mit
+        demselben Fenster, nach dem auch ein konfigurierter Sensor als offline gilt.
+        Eine ältere ID lässt sich im Dropdown weiterhin von Hand eintippen
+        (``custom_value`` im Options-Flow).
         """
-        return {str(uid): self.candidate_label(uid) for uid in sorted(self.unknown_ids)}
+        active_after = time.time() - (self.offline_threshold_minutes * 60)
+        return {
+            str(uid): self.candidate_label(uid)
+            for uid, rec in sorted(self.unknown_ids.items())
+            if rec["last_seen"] >= active_after
+        }
 
     async def _async_flush_store(self) -> None:
         """State periodisch persistieren. Ein per-Messung-Debounce würde bei

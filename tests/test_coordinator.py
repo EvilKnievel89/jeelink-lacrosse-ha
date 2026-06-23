@@ -206,12 +206,13 @@ async def test_unknown_id_is_tracked():
 
 
 async def test_unknown_id_options_lists_seen_ids_with_last_values():
-    """Hinzufügen-Dropdown: gesehene IDs nach ID sortiert, Label mit letzten Werten."""
+    """Hinzufügen-Dropdown: kürzlich gesehene IDs nach ID sortiert, Label mit letzten Werten."""
     coord = JeeLinkCoordinator(_make_hass(), _make_entry())
+    now = time.time()
     coord.unknown_ids = {
-        40: _rec(0.0, temperature=21.5, humidity=48),
-        7: _rec(0.0, temperature=None, humidity=None),
-        18: _rec(0.0, temperature=5.0, humidity=None),
+        40: _rec(now, temperature=21.5, humidity=48),
+        7: _rec(now, temperature=None, humidity=None),
+        18: _rec(now, temperature=5.0, humidity=None),
     }
     opts = coord.unknown_id_options()
 
@@ -219,6 +220,38 @@ async def test_unknown_id_options_lists_seen_ids_with_last_values():
     assert opts["40"] == "40 (21.5 °C, 48 %)"        # Temperatur + Feuchte
     assert opts["18"] == "18 (5.0 °C)"               # nur Temperatur
     assert opts["7"] == "7"                          # noch keine Werte
+
+
+async def test_unknown_id_options_hides_ids_silent_longer_than_threshold():
+    """Entprellung: nur IDs, die innerhalb der Offline-Schwelle zuletzt sendeten,
+    erscheinen – länger stille (durchziehende Fremd-/Alt-Signale) fallen heraus."""
+    coord = JeeLinkCoordinator(_make_hass(), _make_entry())
+    now = time.time()
+    fresh = now - 60                                              # vor 1 min -> drin
+    stale = now - (DEFAULT_OFFLINE_THRESHOLD_MINUTES * 60 + 60)   # über Schwelle -> raus
+    coord.unknown_ids = {
+        7: _rec(stale, last_seen=fresh),     # zuerst alt, aber gerade noch gehört -> drin
+        18: _rec(stale, last_seen=stale),    # lange still -> raus
+        40: _rec(fresh, last_seen=fresh),    # frisch -> drin
+    }
+    opts = coord.unknown_id_options()
+
+    assert list(opts.keys()) == ["7", "40"]          # 18 ist ausgeblendet
+    assert "18" not in opts
+
+
+async def test_unknown_id_options_window_follows_configured_threshold():
+    """Das Entprell-Fenster folgt der je Eintrag konfigurierten Offline-Schwelle."""
+    entry = _make_entry()
+    entry.options = {**entry.options, CONF_OFFLINE_THRESHOLD: 10}
+    coord = JeeLinkCoordinator(_make_hass(), entry)
+    now = time.time()
+    coord.unknown_ids = {
+        5: _rec(now, last_seen=now - (5 * 60)),     # 5 min < 10 min -> drin
+        9: _rec(now, last_seen=now - (15 * 60)),    # 15 min > 10 min -> raus
+    }
+
+    assert list(coord.unknown_id_options().keys()) == ["5"]
 
 
 async def test_register_and_unregister_listener_no_crash():

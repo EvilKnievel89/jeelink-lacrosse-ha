@@ -205,10 +205,13 @@ class JeeLinkOptionsFlow(OptionsFlow):
         return self.config_entry.options.get(CONF_SENSORS, {})
 
     def _id_select_field(self, default: int | None = None):
-        """Schema-Eintrag fürs ID-Feld: Dropdown der gesehenen, noch unbekannten IDs
-        (mit letzten Messwerten als Auswahlhilfe). ``custom_value`` lässt zusätzlich
-        eine ID von Hand eintippen – z. B. eine noch nicht gehörte. ``default`` (als
-        String) belegt beim Bearbeiten die aktuelle ID vor.
+        """Schema-Eintrag fürs ID-Feld: Dropdown der kürzlich gesehenen, noch
+        unbekannten IDs (mit letzten Messwerten als Auswahlhilfe). Lange stille IDs
+        werden ausgeblendet, damit die Liste nicht durch durchziehende Fremd-Signale
+        zurauscht (siehe ``JeeLinkCoordinator.unknown_id_options``). ``custom_value``
+        lässt zusätzlich eine ID von Hand eintippen – z. B. eine noch nicht gehörte
+        oder eine länger stille. ``default`` (als String) belegt beim Bearbeiten die
+        aktuelle ID vor.
         """
         options = [
             selector.SelectOptionDict(value=value, label=label)
@@ -229,7 +232,7 @@ class JeeLinkOptionsFlow(OptionsFlow):
         return key, field
 
     def _unknown_id_options(self) -> dict[str, str]:
-        """``{str(id): Label}`` der gesehenen, noch unbekannten IDs (oder leer)."""
+        """``{str(id): Label}`` der kürzlich gesehenen, noch unbekannten IDs (oder leer)."""
         coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         if coordinator is None:
             return {}
